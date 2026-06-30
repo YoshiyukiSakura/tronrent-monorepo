@@ -3,6 +3,7 @@ dotenv.config();
 const express = require("express");
 const cron = require("node-cron");
 const { sequelize } = require("./db/models");
+const adminRoutes = require("./routes/adminRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const depositRoutes = require("./routes/depositRoutes");
 const exchangeRoutes = require("./routes/exchangeRoutes");
@@ -50,6 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.use("/api/admin", adminRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/deposits", depositRoutes);
 app.use("/api/exchange", exchangeRoutes);

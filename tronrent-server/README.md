@@ -56,6 +56,7 @@ ENABLE_DEPOSIT_WATCHER_CRON=false
 ENABLE_ORDER_EXPIRY_CRON=false
 ENABLE_EXCHANGE_EXPIRY_CRON=false
 ENABLE_DEPOSIT_SCAN_ENDPOINT=false
+ENABLE_READINESS_ENDPOINT=false
 ENABLE_PROVIDER_JOB_ENDPOINT=false
 ENABLE_EXCHANGE_PAYOUT_ENDPOINT=false
 EXCHANGE_PAYOUT_LIVE=false
@@ -74,6 +75,26 @@ TRON_TRC20_ALLOWLIST=USDT:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:6
 
 `ENABLE_DEV_PAYMENT_CONFIRMATION=true` is only for local development. It is
 blocked in `NODE_ENV=production`.
+
+## Runtime Readiness
+
+`GET /api/admin/readiness` is a read-only operator endpoint for checking whether
+the deployment is dry-run, partially live, or fully live-ready. It is disabled by
+default and uses the same admin gate as deposit/provider/payout admin endpoints:
+
+```bash
+ENABLE_READINESS_ENDPOINT=true
+DEPOSIT_WATCHER_ADMIN_TOKEN=replace-with-a-private-token
+```
+
+```bash
+curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
+  http://localhost:4000/api/admin/readiness
+```
+
+The response reports only booleans, enums, counts, and warnings. It does not
+return treasury addresses, API keys, private keys, or TRC20 contract addresses,
+and it does not call APITRX, TronGrid, or any hot-wallet signer.
 
 ## API
 
