@@ -1,0 +1,40 @@
+services:
+  # PostgreSQL服务
+  postgres:
+    image: postgres:16-alpine
+    container_name: tronrent-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=tronrent
+      - POSTGRES_USER=tronrent_user
+      - POSTGRES_PASSWORD=your_password
+    restart: unless-stopped
+    networks:
+      - tronrent-network
+
+  # 应用服务
+  app:
+    build: .
+    container_name: tronrent-app
+    ports:
+      - "4000:3000"
+    depends_on:
+      - postgres
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://tronrent_user:your_password@postgres:5432/tronrent
+      - THIRD_PARTY_API_URL=https://example.com/api/process
+    restart: unless-stopped
+    networks:
+      - tronrent-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  tronrent-network:
+    driver: bridge

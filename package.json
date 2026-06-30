@@ -1,0 +1,18 @@
+{
+  "name": "tronrent-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "tronrent",
+    "tronrent-server"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace tronrent",
+    "dev:server": "npm run dev --workspace tronrent-server",
+    "build:web": "npm run build --workspace tronrent",
+    "lint:web": "npm run lint --workspace tronrent",
+    "start:server": "npm run start --workspace tronrent-server",
+    "docker:server:up": "npm run docker:up --workspace tronrent-server",
+    "docker:server:down": "npm run docker:down --workspace tronrent-server"
+  }
+}
