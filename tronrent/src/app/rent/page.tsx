@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FaCheck, FaCopy, FaWallet } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import RecentOrdersPanel from "@/components/RecentOrdersPanel";
 import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
 import {
@@ -21,6 +22,16 @@ import {
   getEnergyOrderStatusMeta,
   shouldPollEnergyOrder,
 } from "@/lib/orderStatus";
+import {
+  clearRecentOrders,
+  extractOrderIdFromSearch,
+  forgetRecentOrder,
+  normalizeOrderId,
+  readRecentOrders,
+  rememberEnergyOrder,
+  replaceOrderIdInUrl,
+} from "@/lib/orderRecovery";
+import type { RecentOrderEntry } from "@/lib/orderRecovery";
 import { sendWalletTrxPayment } from "@/lib/walletPayment";
 
 function formatDuration(hours: number) {
@@ -56,9 +67,60 @@ export default function RentPage() {
     null
   );
   const [pollingError, setPollingError] = useState<string | null>(null);
+  const [recentOrders, setRecentOrders] = useState<RecentOrderEntry[]>([]);
+  const [recoveryOrderId, setRecoveryOrderId] = useState("");
+  const [isRecoveringOrder, setIsRecoveringOrder] = useState(false);
+  const [recoveryOrderError, setRecoveryOrderError] = useState<string | null>(
+    null
+  );
   const walletPaymentBroadcastRef = useRef(false);
+  const hydratedOrderRef = useRef(false);
   const createdOrderId = createdOrder?.id;
   const createdOrderStatus = createdOrder?.status;
+
+  const resetWalletPaymentTracking = useCallback(() => {
+    setWalletPaymentState("idle");
+    setWalletPaymentTxId(null);
+    setWalletPaymentError(null);
+    walletPaymentBroadcastRef.current = false;
+  }, []);
+
+  const rememberLoadedOrder = useCallback((order: TronRentOrder) => {
+    setRecentOrders(rememberEnergyOrder(order));
+    setRecoveryOrderId(order.id);
+    replaceOrderIdInUrl(order.id);
+  }, []);
+
+  const handleLoadRecoveredOrder = useCallback(
+    async (orderId: string) => {
+      const normalizedOrderId = normalizeOrderId(orderId);
+      if (!normalizedOrderId) {
+        setRecoveryOrderError("请输入有效订单号。");
+        return;
+      }
+
+      try {
+        setIsRecoveringOrder(true);
+        setRecoveryOrderError(null);
+        const order = await getEnergyOrder(normalizedOrderId);
+        setCreatedOrder(order);
+        rememberLoadedOrder(order);
+        resetWalletPaymentTracking();
+        setPollingError(null);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "订单加载失败。";
+        setRecoveryOrderError(
+          message.toLowerCase().includes("not found")
+            ? "未找到这个订单。"
+            : message
+        );
+      } finally {
+        setIsRecoveringOrder(false);
+      }
+    },
+    [rememberLoadedOrder, resetWalletPaymentTracking]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -81,6 +143,23 @@ export default function RentPage() {
   }, []);
 
   useEffect(() => {
+    setRecentOrders(readRecentOrders("energy"));
+
+    if (hydratedOrderRef.current) {
+      return;
+    }
+
+    const orderId = extractOrderIdFromSearch(window.location.search);
+    if (!orderId) {
+      return;
+    }
+
+    hydratedOrderRef.current = true;
+    setRecoveryOrderId(orderId);
+    void handleLoadRecoveredOrder(orderId);
+  }, [handleLoadRecoveredOrder]);
+
+  useEffect(() => {
     if (address && !targetAddress) {
       setTargetAddress(address);
     }
@@ -97,6 +176,7 @@ export default function RentPage() {
         const order = await getEnergyOrder(createdOrderId);
         if (!isMounted) return;
         setCreatedOrder(order);
+        setRecentOrders(rememberEnergyOrder(order));
         setPollingError(null);
       } catch (error) {
         if (!isMounted) return;
@@ -154,10 +234,10 @@ export default function RentPage() {
       });
 
       setCreatedOrder(order);
-      setWalletPaymentState("idle");
-      setWalletPaymentTxId(null);
-      setWalletPaymentError(null);
+      rememberLoadedOrder(order);
+      resetWalletPaymentTracking();
       setPollingError(null);
+      setRecoveryOrderError(null);
       walletPaymentBroadcastRef.current = false;
     } catch (error) {
       setSubmitError(
@@ -431,6 +511,19 @@ export default function RentPage() {
                   ? "连接钱包"
                   : "创建订单"}
               </button>
+
+              <RecentOrdersPanel
+                orderId={recoveryOrderId}
+                recentOrders={recentOrders}
+                isLoading={isRecoveringOrder}
+                error={recoveryOrderError}
+                onOrderIdChange={setRecoveryOrderId}
+                onLoad={handleLoadRecoveredOrder}
+                onForget={(orderId) =>
+                  setRecentOrders(forgetRecentOrder("energy", orderId))
+                }
+                onClear={() => setRecentOrders(clearRecentOrders("energy"))}
+              />
 
               {createdOrder && (
                 <div className="mt-6 border-t border-[#30363d] pt-5">

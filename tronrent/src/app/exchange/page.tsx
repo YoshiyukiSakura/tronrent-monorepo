@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FaArrowRightArrowLeft, FaRotate } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import RecentOrdersPanel from "@/components/RecentOrdersPanel";
 import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
 import {
@@ -21,6 +22,16 @@ import {
   getExchangeOrderStatusMeta,
   shouldPollExchangeOrder,
 } from "@/lib/orderStatus";
+import {
+  clearRecentOrders,
+  extractOrderIdFromSearch,
+  forgetRecentOrder,
+  normalizeOrderId,
+  readRecentOrders,
+  rememberExchangeOrder,
+  replaceOrderIdInUrl,
+} from "@/lib/orderRecovery";
+import type { RecentOrderEntry } from "@/lib/orderRecovery";
 import { sendExchangeWalletDeposit } from "@/lib/walletPayment";
 
 function makeIdempotencyKey() {
@@ -84,9 +95,62 @@ export default function ExchangePage() {
     null
   );
   const [pollingError, setPollingError] = useState<string | null>(null);
+  const [recentOrders, setRecentOrders] = useState<RecentOrderEntry[]>([]);
+  const [recoveryOrderId, setRecoveryOrderId] = useState("");
+  const [isRecoveringOrder, setIsRecoveringOrder] = useState(false);
+  const [recoveryOrderError, setRecoveryOrderError] = useState<string | null>(
+    null
+  );
   const walletDepositBroadcastRef = useRef(false);
+  const hydratedOrderRef = useRef(false);
   const createdOrderId = createdOrder?.id;
   const createdOrderStatus = createdOrder?.status;
+
+  const resetWalletDepositTracking = useCallback(() => {
+    walletDepositBroadcastRef.current = false;
+    setWalletDepositState("idle");
+    setWalletDepositTxId(null);
+    setWalletDepositError(null);
+  }, []);
+
+  const rememberLoadedOrder = useCallback((order: ExchangeOrder) => {
+    setRecentOrders(rememberExchangeOrder(order));
+    setRecoveryOrderId(order.id);
+    replaceOrderIdInUrl(order.id);
+  }, []);
+
+  const handleLoadRecoveredOrder = useCallback(
+    async (orderId: string) => {
+      const normalizedOrderId = normalizeOrderId(orderId);
+      if (!normalizedOrderId) {
+        setRecoveryOrderError("请输入有效订单号。");
+        return;
+      }
+
+      try {
+        setIsRecoveringOrder(true);
+        setRecoveryOrderError(null);
+        const order = await getExchangeOrder(normalizedOrderId);
+        setQuote(null);
+        setQuoteKey(null);
+        setCreatedOrder(order);
+        rememberLoadedOrder(order);
+        resetWalletDepositTracking();
+        setPollingError(null);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "兑换订单加载失败。";
+        setRecoveryOrderError(
+          message.toLowerCase().includes("not found")
+            ? "未找到这个兑换订单。"
+            : message
+        );
+      } finally {
+        setIsRecoveringOrder(false);
+      }
+    },
+    [rememberLoadedOrder, resetWalletDepositTracking]
+  );
 
   useEffect(() => {
     if (address && !outputAddress) {
@@ -98,6 +162,23 @@ export default function ExchangePage() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    setRecentOrders(readRecentOrders("exchange"));
+
+    if (hydratedOrderRef.current) {
+      return;
+    }
+
+    const orderId = extractOrderIdFromSearch(window.location.search);
+    if (!orderId) {
+      return;
+    }
+
+    hydratedOrderRef.current = true;
+    setRecoveryOrderId(orderId);
+    void handleLoadRecoveredOrder(orderId);
+  }, [handleLoadRecoveredOrder]);
 
   useEffect(() => {
     if (!createdOrderId) {
@@ -136,6 +217,7 @@ export default function ExchangePage() {
         const order = await getExchangeOrder(createdOrderId);
         if (!isMounted) return;
         setCreatedOrder(order);
+        setRecentOrders(rememberExchangeOrder(order));
         setPollingError(null);
       } catch (pollError) {
         if (!isMounted) return;
@@ -172,11 +254,11 @@ export default function ExchangePage() {
     setQuote(null);
     setQuoteKey(null);
     setCreatedOrder(null);
-    walletDepositBroadcastRef.current = false;
-    setWalletDepositState("idle");
-    setWalletDepositTxId(null);
-    setWalletDepositError(null);
+    resetWalletDepositTracking();
     setPollingError(null);
+    setRecoveryOrderId("");
+    setRecoveryOrderError(null);
+    replaceOrderIdInUrl(null);
   };
 
   const copyText = async (field: string, value: string | null) => {
@@ -196,6 +278,8 @@ export default function ExchangePage() {
       setIsQuoting(true);
       setError(null);
       setCreatedOrder(null);
+      replaceOrderIdInUrl(null);
+      setRecoveryOrderId("");
       const nextQuote = await createExchangeQuote({
         direction,
         inputAmount: inputAmount.trim(),
@@ -237,11 +321,10 @@ export default function ExchangePage() {
         idempotencyKey: quoteKey || makeIdempotencyKey(),
       });
       setCreatedOrder(order);
-      walletDepositBroadcastRef.current = false;
-      setWalletDepositState("idle");
-      setWalletDepositTxId(null);
-      setWalletDepositError(null);
+      rememberLoadedOrder(order);
+      resetWalletDepositTracking();
       setPollingError(null);
+      setRecoveryOrderError(null);
     } catch (orderError) {
       const message =
         orderError instanceof Error ? orderError.message : "创建兑换订单失败。";
@@ -558,6 +641,19 @@ export default function ExchangePage() {
                   )}
                 </div>
               )}
+
+              <RecentOrdersPanel
+                orderId={recoveryOrderId}
+                recentOrders={recentOrders}
+                isLoading={isRecoveringOrder}
+                error={recoveryOrderError}
+                onOrderIdChange={setRecoveryOrderId}
+                onLoad={handleLoadRecoveredOrder}
+                onForget={(orderId) =>
+                  setRecentOrders(forgetRecentOrder("exchange", orderId))
+                }
+                onClear={() => setRecentOrders(clearRecentOrders("exchange"))}
+              />
 
               {createdOrder && (
                 <div>
