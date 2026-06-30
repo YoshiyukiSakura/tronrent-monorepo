@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FaCheck, FaCopy, FaWallet } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
 import {
   EnergyPlan,
@@ -15,6 +16,11 @@ import {
   fetchEnergyPlans,
   getEnergyOrder,
 } from "@/lib/tronrentApi";
+import {
+  buildEnergyOrderTimeline,
+  getEnergyOrderStatusMeta,
+  shouldPollEnergyOrder,
+} from "@/lib/orderStatus";
 import { sendWalletTrxPayment } from "@/lib/walletPayment";
 
 function formatDuration(hours: number) {
@@ -81,7 +87,7 @@ export default function RentPage() {
   }, [address, targetAddress]);
 
   useEffect(() => {
-    if (!createdOrderId || createdOrderStatus !== "pending_payment") {
+    if (!createdOrderId || !shouldPollEnergyOrder(createdOrderStatus)) {
       return;
     }
 
@@ -100,6 +106,7 @@ export default function RentPage() {
       }
     };
 
+    void pollOrder();
     const interval = window.setInterval(pollOrder, 5000);
     return () => {
       isMounted = false;
@@ -206,6 +213,29 @@ export default function RentPage() {
   const canShowWalletPaymentButton =
     createdOrder?.paymentMethod === "wallet_connect" &&
     createdOrder.status === "pending_payment";
+  const orderStatusMeta = createdOrder
+    ? getEnergyOrderStatusMeta(createdOrder.status)
+    : null;
+  const orderTimeline = createdOrder
+    ? buildEnergyOrderTimeline(createdOrder.status)
+    : [];
+  const latestPayment = createdOrder?.payments?.[0] || null;
+  const latestProviderJob = createdOrder?.providerJobs?.[0] || null;
+  const providerEvidence =
+    latestProviderJob?.response?.manualResolution?.upstreamOrderId ||
+    latestProviderJob?.upstreamOrderId ||
+    latestProviderJob?.response?.upstreamOrderId ||
+    null;
+  const providerMode =
+    latestProviderJob && latestProviderJob.dryRun !== undefined
+      ? latestProviderJob.dryRun
+        ? "模拟进货"
+        : "真实进货"
+      : createdOrder?.paymentInstructions.executionMode?.providerLive === false
+      ? "后台进货未启用"
+      : createdOrder?.paymentInstructions.executionMode?.providerLive === true
+      ? "等待付款确认后真实进货"
+      : "等待付款确认后执行";
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#0d1117] to-[#161b22] text-white">
@@ -255,7 +285,7 @@ export default function RentPage() {
             <div>
               <h2 className="text-3xl font-bold">租赁 Tron 能量</h2>
               <p className="text-gray-300 mt-2">
-                选择套餐后生成订单和付款指引，供应商进货当前保持 dry-run。
+                选择套餐后生成订单和付款指引；链上确认后系统按后台安全开关自动进货。
               </p>
             </div>
             <div className="rounded-md border border-[#30363d] px-4 py-3 text-sm text-gray-300">
@@ -406,10 +436,21 @@ export default function RentPage() {
                 <div className="mt-6 border-t border-[#30363d] pt-5">
                   <div className="mb-3 flex items-center justify-between gap-4">
                     <h4 className="font-bold">付款指引</h4>
-                    <span className="rounded-full bg-[#0d1117] px-3 py-1 text-xs text-gray-300">
-                      {createdOrder.status}
-                    </span>
+                    {orderStatusMeta && (
+                      <StatusPill
+                        label={orderStatusMeta.label}
+                        tone={orderStatusMeta.tone}
+                      />
+                    )}
                   </div>
+                  {orderStatusMeta && (
+                    <div className="mb-4 rounded-md border border-[#30363d] bg-[#0d1117] p-4">
+                      <div className="text-sm text-gray-200">
+                        {orderStatusMeta.description}
+                      </div>
+                      <StatusTimeline steps={orderTimeline} />
+                    </div>
+                  )}
                   <InstructionRow
                     label="订单号"
                     value={createdOrder.id}
@@ -446,6 +487,33 @@ export default function RentPage() {
                       copyText("reference", createdOrder.paymentReference)
                     }
                   />
+                  {latestPayment?.status && (
+                    <InstructionRow label="付款状态" value={latestPayment.status} />
+                  )}
+                  {latestPayment?.txHash && (
+                    <InstructionRow
+                      label="入金交易"
+                      value={latestPayment.txHash}
+                      copied={copiedField === "paymentTx"}
+                      onCopy={() => copyText("paymentTx", latestPayment.txHash)}
+                    />
+                  )}
+                  {latestProviderJob?.status && (
+                    <InstructionRow
+                      label="进货状态"
+                      value={`${latestProviderJob.status} / ${providerMode}`}
+                    />
+                  )}
+                  {providerEvidence && (
+                    <InstructionRow
+                      label="上游订单"
+                      value={providerEvidence}
+                      copied={copiedField === "providerEvidence"}
+                      onCopy={() =>
+                        copyText("providerEvidence", providerEvidence)
+                      }
+                    />
+                  )}
                   {createdOrder.paymentInstructions.warnings.map((warning) => (
                     <p key={warning} className="mt-3 text-xs text-orange-200">
                       {warning}

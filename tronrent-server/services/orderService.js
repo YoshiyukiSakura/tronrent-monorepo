@@ -74,6 +74,9 @@ function buildPaymentInstructions(orderLike) {
     }`,
     address,
     paymentReference: order.paymentReference,
+    executionMode: {
+      providerLive: process.env.PROVIDER_LIVE === "true",
+    },
     configured,
     warnings: configured
       ? order.paymentMethod === "wallet_connect"
@@ -381,7 +384,7 @@ async function createOrder(payload) {
             basePriceAmountSun: String(paymentAmount.basePriceAmountSun),
             priceOffsetSun: paymentAmount.priceOffsetSun,
             paymentConfigured: Boolean(paymentAddress),
-            safetyMode: "no-live-funds-or-provider-calls",
+            providerLiveAtCreation: process.env.PROVIDER_LIVE === "true",
           },
         },
         { transaction }

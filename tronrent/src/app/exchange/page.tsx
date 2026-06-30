@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FaArrowRightArrowLeft, FaRotate } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
 import {
   ExchangeDirection,
@@ -15,6 +16,11 @@ import {
   createExchangeQuote,
   getExchangeOrder,
 } from "@/lib/tronrentApi";
+import {
+  buildExchangeOrderTimeline,
+  getExchangeOrderStatusMeta,
+  shouldPollExchangeOrder,
+} from "@/lib/orderStatus";
 import { sendExchangeWalletDeposit } from "@/lib/walletPayment";
 
 function makeIdempotencyKey() {
@@ -120,7 +126,7 @@ export default function ExchangePage() {
   }, [createdOrderId]);
 
   useEffect(() => {
-    if (!createdOrderId || createdOrderStatus !== "pending_deposit") {
+    if (!createdOrderId || !shouldPollExchangeOrder(createdOrderStatus)) {
       return;
     }
 
@@ -139,6 +145,7 @@ export default function ExchangePage() {
       }
     };
 
+    void pollOrder();
     const interval = window.setInterval(pollOrder, 5000);
     return () => {
       isMounted = false;
@@ -317,6 +324,31 @@ export default function ExchangePage() {
     walletDepositTxId === "submitted-without-wallet-txid"
       ? "已提交（等待链上确认）"
       : walletDepositTxId;
+  const exchangeStatusMeta = createdOrder
+    ? getExchangeOrderStatusMeta(createdOrder.status)
+    : null;
+  const exchangeTimeline = createdOrder
+    ? buildExchangeOrderTimeline(createdOrder.status)
+    : [];
+  const latestPayoutJob = createdOrder?.payoutJobs?.[0] || null;
+  const payoutEvidence =
+    latestPayoutJob?.response?.manualResolution?.txid ||
+    latestPayoutJob?.response?.txid ||
+    latestPayoutJob?.response?.broadcastResponse?.txid ||
+    latestPayoutJob?.txid ||
+    null;
+  const payoutMode =
+    latestPayoutJob && latestPayoutJob.dryRun !== undefined
+      ? latestPayoutJob.dryRun
+        ? "模拟出款"
+        : "真实出款"
+      : createdOrder?.depositInstructions.executionMode?.payoutLive === false
+      ? "后台出款未启用"
+      : createdOrder?.depositInstructions.executionMode?.payoutLive === true
+      ? "等待入金确认后真实出款"
+      : quote?.metadata?.executionEnabled === false
+      ? "后台出款未启用"
+      : "等待入金确认后执行";
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#0d1117] to-[#161b22] text-white">
@@ -363,7 +395,7 @@ export default function ExchangePage() {
             <div>
               <h2 className="text-3xl font-bold">TRX / USDT 兑换</h2>
               <p className="text-gray-300 mt-2">
-                报价生成订单后显示精确打款金额；当前出款保持 dry-run。
+                报价生成订单后显示精确打款金额；链上确认后系统按后台安全开关自动出款。
               </p>
             </div>
             <div className="rounded-md border border-[#30363d] px-4 py-3 text-sm text-gray-300">
@@ -511,7 +543,7 @@ export default function ExchangePage() {
                   </div>
                   {quote.metadata?.executionEnabled === false && (
                     <p className="mb-4 text-xs text-orange-200">
-                      当前兑换出款为 dry-run；创建订单不会触发真实转账。
+                      当前后台出款未启用；订单可用于本地流程验证，不会触发真实转账。
                     </p>
                   )}
                   {quoteExpired && (
@@ -531,10 +563,21 @@ export default function ExchangePage() {
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-4">
                     <h4 className="font-bold">兑换付款指引</h4>
-                    <span className="rounded-full bg-[#0d1117] px-3 py-1 text-xs text-gray-300">
-                      {createdOrder.status}
-                    </span>
+                    {exchangeStatusMeta && (
+                      <StatusPill
+                        label={exchangeStatusMeta.label}
+                        tone={exchangeStatusMeta.tone}
+                      />
+                    )}
                   </div>
+                  {exchangeStatusMeta && (
+                    <div className="mb-4 rounded-md border border-[#30363d] bg-[#0d1117] p-4">
+                      <div className="text-sm text-gray-200">
+                        {exchangeStatusMeta.description}
+                      </div>
+                      <StatusTimeline steps={exchangeTimeline} />
+                    </div>
+                  )}
                   <InstructionRow
                     label="订单号"
                     value={createdOrder.id}
@@ -595,6 +638,28 @@ export default function ExchangePage() {
                     value={formatSeconds(orderSecondsRemaining)}
                     tone={orderExpired ? "warning" : "default"}
                   />
+                  {createdOrder.fundsReceivedAt && (
+                    <InstructionRow
+                      label="入金确认"
+                      value={new Date(
+                        createdOrder.fundsReceivedAt
+                      ).toLocaleString("zh-CN")}
+                    />
+                  )}
+                  {latestPayoutJob?.status && (
+                    <InstructionRow
+                      label="出款状态"
+                      value={`${latestPayoutJob.status} / ${payoutMode}`}
+                    />
+                  )}
+                  {payoutEvidence && (
+                    <InstructionRow
+                      label="出款交易"
+                      value={payoutEvidence}
+                      copied={copiedField === "payoutTx"}
+                      onCopy={() => copyText("payoutTx", payoutEvidence)}
+                    />
+                  )}
                   {createdOrder.depositInstructions.warnings.map((warning) => (
                     <p
                       key={warning}

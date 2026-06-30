@@ -30,6 +30,42 @@ export type TronRentOrder = {
   durationHours: number;
   paymentReference: string;
   expiresAt: string;
+  paidAt?: string | null;
+  fulfilledAt?: string | null;
+  payments?: Array<{
+    id: string;
+    method: PaymentMethod;
+    asset: string;
+    status: string;
+    expectedAmountSun: string;
+    receivedAmountSun: string | null;
+    txHash: string | null;
+    fromAddress: string | null;
+    toAddress: string | null;
+    confirmedAt: string | null;
+    detectedAt: string | null;
+  }>;
+  providerJobs?: Array<{
+    id: string;
+    status: string;
+    dryRun: boolean;
+    provider: string;
+    upstreamOrderId: string | null;
+    lastError: string | null;
+    processedAt: string | null;
+    response?: {
+      dryRun?: boolean;
+      provider?: string;
+      upstreamOrderId?: string | null;
+      manualResolution?: {
+        resolution?: string;
+        upstreamOrderId?: string;
+        txid?: string;
+        resolvedBy?: string;
+        resolvedAt?: string;
+      } | null;
+    } | null;
+  }>;
   paymentInstructions: {
     method: PaymentMethod;
     asset: string;
@@ -37,6 +73,9 @@ export type TronRentOrder = {
     amountDisplay: string;
     address: string | null;
     paymentReference: string;
+    executionMode?: {
+      providerLive?: boolean;
+    };
     configured: boolean;
     warnings: string[];
   };
@@ -84,6 +123,8 @@ export type ExchangeOrder = {
   rate: string;
   depositReference: string;
   expiresAt: string;
+  fundsReceivedAt?: string | null;
+  payoutCompletedAt?: string | null;
   depositInstructions: {
     asset: "TRX" | "USDT";
     amountBaseUnits: string;
@@ -91,12 +132,31 @@ export type ExchangeOrder = {
     address: string;
     contractAddress: string | null;
     depositReference: string;
+    executionMode?: {
+      payoutLive?: boolean;
+    };
     warnings: string[];
   };
   payoutJobs: Array<{
     id: string;
     status: string;
     dryRun: boolean;
+    txid?: string | null;
+    lastError?: string | null;
+    processedAt?: string | null;
+    response?: {
+      txid?: string | null;
+      broadcastResponse?: {
+        txid?: string | null;
+      } | null;
+      manualResolution?: {
+        resolution?: string;
+        txid?: string;
+        upstreamOrderId?: string;
+        resolvedBy?: string;
+        resolvedAt?: string;
+      } | null;
+    } | null;
   }>;
 };
 

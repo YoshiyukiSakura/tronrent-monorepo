@@ -18,6 +18,10 @@ function getStaticRate() {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.12;
 }
 
+function isExchangeExecutionEnabled() {
+  return process.env.EXCHANGE_PAYOUT_LIVE === "true";
+}
+
 function calculateQuote(direction, inputAmount) {
   const amount = Number.parseFloat(inputAmount);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -69,7 +73,7 @@ async function createExchangeQuote(payload) {
         ? "env-static-rate"
         : "dev-static-rate",
       rate: quote.rate,
-      executionEnabled: false,
+      executionEnabled: isExchangeExecutionEnabled(),
     },
   });
 
@@ -80,4 +84,5 @@ module.exports = {
   DIRECTIONS,
   calculateQuote,
   createExchangeQuote,
+  isExchangeExecutionEnabled,
 };

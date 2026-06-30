@@ -86,6 +86,10 @@ function getExchangeTreasuryAddress() {
   return process.env.EXCHANGE_TREASURY_TRON_ADDRESS || null;
 }
 
+function isExchangePayoutExecutionEnabled() {
+  return process.env.EXCHANGE_PAYOUT_LIVE === "true";
+}
+
 function getUsdtConfig() {
   const usdtConfig = getAllowedTrc20Contracts().find(
     (entry) => entry.symbol === "USDT"
@@ -208,8 +212,13 @@ function serializeExchangeOrder(orderInstance) {
       address: order.treasuryAddress,
       contractAddress: order.inputContractAddress,
       depositReference: order.depositReference,
+      executionMode: {
+        payoutLive: isExchangePayoutExecutionEnabled(),
+      },
       warnings: [
-        "Exchange payouts are dry-run in this slice; no live transfer is broadcast.",
+        isExchangePayoutExecutionEnabled()
+          ? "链上入金确认后，系统会按后台出款开关自动执行兑换出款。"
+          : "当前后台出款未启用；订单可用于本地流程验证，不会触发真实转账。",
         order.inputOffsetBaseUnits > 0
           ? "Pay the exact displayed amount, including the small tail amount used to identify this exchange order."
           : null,
@@ -399,7 +408,7 @@ async function createExchangeOrder(payload) {
                 spreadBps: quote.spreadBps,
                 rate: quote.metadata?.rate,
               },
-              dryRunPayoutOnly: true,
+              payoutLiveAtCreation: isExchangePayoutExecutionEnabled(),
             },
           },
           { transaction }
@@ -508,5 +517,6 @@ module.exports = {
   expirePendingExchangeOrders,
   getAssetConfig,
   getExchangeOrderById,
+  isExchangePayoutExecutionEnabled,
   serializeExchangeOrder,
 };
