@@ -1,6 +1,5 @@
 const axios = require("axios");
-const QueueItem = require("../models/QueueItem");
-const { Op } = require("sequelize");
+const { QueueItem } = require("../db/models");
 
 /**
  * Add a new item to the queue
@@ -47,6 +46,10 @@ async function addToQueue(hash, targetAddress) {
  */
 async function processQueue() {
   try {
+    if (!process.env.THIRD_PARTY_API_URL) {
+      throw new Error("THIRD_PARTY_API_URL is required to process queue items");
+    }
+
     // Find all pending items
     const pendingItems = await QueueItem.findAll({
       where: { status: "pending" },

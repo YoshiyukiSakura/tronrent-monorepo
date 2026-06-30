@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3100",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "NEXT_DIST_DIR=.next-dev next dev --port 3100",
+    "dev:3101": "NEXT_DIST_DIR=.next-dev next dev --port 3101",
+    "build": "NEXT_DIST_DIR=.next-build next build",
+    "start": "NEXT_DIST_DIR=.next-build next start",
+    "lint": "next lint",
+    "test:wallet": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.12.0",
