@@ -36,6 +36,56 @@ function normalizeAddress(address) {
   return address ? String(address).trim() : null;
 }
 
+function normalizeFingerprint(fingerprint) {
+  const normalized = String(fingerprint || "").trim();
+  return normalized || null;
+}
+
+function getDepositScanMaxPages(rawMaxPages) {
+  const parsed = Number.parseInt(
+    rawMaxPages || process.env.DEPOSIT_SCAN_MAX_PAGES || "20",
+    10
+  );
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 20;
+  }
+  return Math.min(parsed, 200);
+}
+
+function resolveDepositScanMinTimestamp(rawMinTimestamp) {
+  if (
+    rawMinTimestamp !== undefined &&
+    rawMinTimestamp !== null &&
+    rawMinTimestamp !== ""
+  ) {
+    return rawMinTimestamp;
+  }
+
+  const lookbackMinutes = Number.parseInt(
+    process.env.DEPOSIT_SCAN_LOOKBACK_MINUTES || "180",
+    10
+  );
+  const safeLookback = Number.isFinite(lookbackMinutes)
+    ? Math.max(1, lookbackMinutes)
+    : 180;
+  return Date.now() - safeLookback * 60 * 1000;
+}
+
+function buildTruncationWarning({ address, asset, pageCount }) {
+  return {
+    code: "DEPOSIT_SCAN_TRUNCATED",
+    severity: "warning",
+    address,
+    asset,
+    pageCount,
+    message: `Deposit scan for ${asset} ${address} reached ${pageCount} pages while TronGrid still returned another page.`,
+  };
+}
+
+function logTruncationWarning(warning) {
+  console.warn(`[deposit-scan] ${warning.message}`);
+}
+
 function assertDepositScanRouteEnabled(req) {
   requireEnabledAdminRoute({
     req,
@@ -176,6 +226,90 @@ async function findCandidateExchangeOrders(deposit, transaction) {
     transaction,
     lock: true,
   });
+}
+
+async function fetchPaginatedInboundTransfers({
+  address,
+  asset,
+  fetchPage,
+  limit,
+  minTimestamp,
+  maxPages,
+}) {
+  const deposits = [];
+  const safeMaxPages = getDepositScanMaxPages(maxPages);
+  let fingerprint = null;
+  let pageCount = 0;
+
+  while (pageCount < safeMaxPages) {
+    const page = await fetchPage(address, {
+      limit,
+      minTimestamp,
+      fingerprint,
+    });
+    pageCount += 1;
+    deposits.push(...(page.deposits || []));
+
+    fingerprint = normalizeFingerprint(page.fingerprint);
+    if (!fingerprint) {
+      break;
+    }
+  }
+
+  const truncated = Boolean(fingerprint);
+  return {
+    address,
+    asset,
+    deposits,
+    pageCount,
+    truncated,
+    nextFingerprintAvailable: truncated,
+  };
+}
+
+async function fetchTreasuryAddressDeposits({
+  treasuryAddress,
+  limit,
+  minTimestamp,
+  maxPages,
+}) {
+  const trxResult = await fetchPaginatedInboundTransfers({
+    address: treasuryAddress,
+    asset: "TRX",
+    fetchPage: tronGridClient.fetchInboundTrxTransfers,
+    limit,
+    minTimestamp,
+    maxPages,
+  });
+  const trc20Result = await fetchPaginatedInboundTransfers({
+    address: treasuryAddress,
+    asset: "TRC20",
+    fetchPage: tronGridClient.fetchInboundTrc20Transfers,
+    limit,
+    minTimestamp,
+    maxPages,
+  });
+
+  const pageResults = [trxResult, trc20Result];
+  return {
+    events: pageResults.flatMap((result) => result.deposits),
+    pageSummaries: pageResults.map((result) => ({
+      address: result.address,
+      asset: result.asset,
+      pageCount: result.pageCount,
+      depositCount: result.deposits.length,
+      truncated: result.truncated,
+    })),
+    truncationWarnings: pageResults
+      .filter((result) => result.truncated)
+      .map((result) =>
+        buildTruncationWarning({
+          address: result.address,
+          asset: result.asset,
+          pageCount: result.pageCount,
+        })
+      ),
+  };
 }
 
 async function recordAndMatchDeposit(inputDeposit) {
@@ -401,18 +535,24 @@ async function scanConfiguredTreasury(options = {}) {
   scanInProgress = true;
   try {
     const scanLimit = options.limit || 50;
-    const minTimestamp = options.minTimestamp;
+    const minTimestamp = resolveDepositScanMinTimestamp(options.minTimestamp);
+    const maxPages = getDepositScanMaxPages(options.maxPages);
     const events = [];
+    const pageSummaries = [];
+    const truncationWarnings = [];
     for (const treasuryAddress of treasuryAddresses) {
-      const trxResult = await tronGridClient.fetchInboundTrxTransfers(
+      const treasuryResult = await fetchTreasuryAddressDeposits({
         treasuryAddress,
-        { limit: scanLimit, minTimestamp }
-      );
-      const trc20Result = await tronGridClient.fetchInboundTrc20Transfers(
-        treasuryAddress,
-        { limit: scanLimit, minTimestamp }
-      );
-      events.push(...trxResult.deposits, ...trc20Result.deposits);
+        limit: scanLimit,
+        minTimestamp,
+        maxPages,
+      });
+      events.push(...treasuryResult.events);
+      pageSummaries.push(...treasuryResult.pageSummaries);
+      for (const warning of treasuryResult.truncationWarnings) {
+        logTruncationWarning(warning);
+        truncationWarnings.push(warning);
+      }
     }
 
     const results = [];
@@ -455,6 +595,9 @@ async function scanConfiguredTreasury(options = {}) {
       scanned: events.length,
       created: results.filter((result) => result.created).length,
       matched: matchedCount,
+      truncated: truncationWarnings.length > 0,
+      truncationWarnings,
+      pageSummaries,
       providerResults,
       exchangePayoutResults,
       results,
@@ -471,9 +614,13 @@ module.exports = {
   classifyExchangeDepositMatch,
   classifyDepositMatch,
   depositMatchesExchangeOrder,
+  fetchPaginatedInboundTransfers,
+  fetchTreasuryAddressDeposits,
   getAllowedTrc20Contracts,
+  getDepositScanMaxPages,
   isAllowedTrc20Deposit,
   listDeposits,
   recordAndMatchDeposit,
+  resolveDepositScanMinTimestamp,
   scanConfiguredTreasury,
 };

@@ -70,6 +70,8 @@ ORDER_CREATE_MAX_ATTEMPTS=8
 EXCHANGE_MAX_PAYMENT_OFFSET_BASE_UNITS=9999
 EXCHANGE_ORDER_CREATE_MAX_ATTEMPTS=8
 TRONGRID_API_BASE_URL=https://api.trongrid.io
+DEPOSIT_SCAN_LOOKBACK_MINUTES=180
+DEPOSIT_SCAN_MAX_PAGES=20
 TRON_TRC20_ALLOWLIST=USDT:TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:6
 ```
 
@@ -95,6 +97,14 @@ curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
 The response reports only booleans, enums, counts, and warnings. It does not
 return treasury addresses, API keys, private keys, or TRC20 contract addresses,
 and it does not call APITRX, TronGrid, or any hot-wallet signer.
+
+## Deposit Scan Pagination
+
+Deposit scans follow TronGrid pagination cursors so a busy treasury does not
+silently miss older deposits after the first page. `DEPOSIT_SCAN_MAX_PAGES`
+defaults to `20` and is capped at `200`. When the cap is reached while TronGrid
+still reports another page, the scan returns `truncated: true` with
+`truncationWarnings[]` and logs a warning for operator follow-up.
 
 ## API
 

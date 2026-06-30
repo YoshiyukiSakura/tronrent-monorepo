@@ -8,16 +8,33 @@ const {
   classifyDepositMatch,
   isAllowedTrc20Deposit,
 } = require("../services/depositMatcher");
+const depositWatcherService = require("../services/depositWatcherService");
+const tronGridClient = require("../services/tronGridClient");
 const {
   assertDepositScanRouteEnabled,
   classifyExchangeDepositMatch,
   depositMatchesExchangeOrder,
-} = require("../services/depositWatcherService");
+  fetchPaginatedInboundTransfers,
+  getDepositScanMaxPages,
+  resolveDepositScanMinTimestamp,
+  scanConfiguredTreasury,
+} = depositWatcherService;
 
 const ORIGINAL_ENV = { ...process.env };
+const ORIGINALS = {
+  fetchInboundTrxTransfers: tronGridClient.fetchInboundTrxTransfers,
+  fetchInboundTrc20Transfers: tronGridClient.fetchInboundTrc20Transfers,
+  consoleWarn: console.warn,
+  dateNow: Date.now,
+};
 
 test.afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
+  tronGridClient.fetchInboundTrxTransfers = ORIGINALS.fetchInboundTrxTransfers;
+  tronGridClient.fetchInboundTrc20Transfers =
+    ORIGINALS.fetchInboundTrc20Transfers;
+  console.warn = ORIGINALS.consoleWarn;
+  Date.now = ORIGINALS.dateNow;
 });
 
 function makeCandidate(overrides = {}) {
@@ -282,5 +299,188 @@ test("deposit scan admin gate accepts matching token when explicitly enabled", (
     assertDepositScanRouteEnabled({
       get: () => "secret-admin-token",
     })
+  );
+});
+
+test("deposit scan max pages defaults and clamps unsafe values", () => {
+  delete process.env.DEPOSIT_SCAN_MAX_PAGES;
+  assert.equal(getDepositScanMaxPages(), 20);
+  assert.equal(getDepositScanMaxPages("0"), 20);
+  assert.equal(getDepositScanMaxPages("2"), 2);
+  assert.equal(getDepositScanMaxPages("9999"), 200);
+});
+
+test("deposit scan min timestamp freezes lookback once per scan", async () => {
+  process.env.TREASURY_TRON_ADDRESS = "TTreasury111111111111111111111111111";
+  process.env.DEPOSIT_SCAN_LOOKBACK_MINUTES = "1";
+  delete process.env.EXCHANGE_TREASURY_TRON_ADDRESS;
+  let dateNowCalls = 0;
+  const trxCalls = [];
+  const trc20Calls = [];
+
+  Date.now = () => {
+    dateNowCalls += 1;
+    return 1_000_000 + dateNowCalls;
+  };
+  tronGridClient.fetchInboundTrxTransfers = async (_address, options) => {
+    trxCalls.push(options);
+    return {
+      deposits: [],
+      fingerprint: trxCalls.length === 1 ? "trx-cursor-2" : null,
+    };
+  };
+  tronGridClient.fetchInboundTrc20Transfers = async (_address, options) => {
+    trc20Calls.push(options);
+    return { deposits: [], fingerprint: null };
+  };
+
+  const result = await scanConfiguredTreasury({
+    limit: 1,
+    maxPages: 5,
+  });
+  const expectedMinTimestamp = 940001;
+
+  assert.equal(result.truncated, false);
+  assert.equal(dateNowCalls, 1);
+  assert.deepEqual(
+    [...trxCalls, ...trc20Calls].map((call) => call.minTimestamp),
+    [expectedMinTimestamp, expectedMinTimestamp, expectedMinTimestamp]
+  );
+  assert.equal(resolveDepositScanMinTimestamp(123), 123);
+});
+
+test("paginated inbound transfer fetch walks TronGrid fingerprint pages", async () => {
+  const calls = [];
+  const result = await fetchPaginatedInboundTransfers({
+    address: "TTreasury111111111111111111111111111",
+    asset: "TRX",
+    limit: 2,
+    minTimestamp: 1234567890,
+    maxPages: 5,
+    fetchPage: async (address, options) => {
+      calls.push({ address, options });
+      if (calls.length === 1) {
+        return {
+          deposits: [{ txHash: "first-page" }],
+          fingerprint: "cursor-2",
+        };
+      }
+      return {
+        deposits: [{ txHash: "second-page" }],
+        fingerprint: null,
+      };
+    },
+  });
+
+  assert.equal(result.truncated, false);
+  assert.equal(result.pageCount, 2);
+  assert.deepEqual(
+    result.deposits.map((deposit) => deposit.txHash),
+    ["first-page", "second-page"]
+  );
+  assert.deepEqual(
+    calls.map((call) => call.options.fingerprint),
+    [null, "cursor-2"]
+  );
+  assert.equal(calls[0].options.limit, 2);
+  assert.equal(calls[0].options.minTimestamp, 1234567890);
+});
+
+test("paginated inbound transfer fetch reports truncation at the page cap", async () => {
+  const calls = [];
+  const result = await fetchPaginatedInboundTransfers({
+    address: "TTreasury111111111111111111111111111",
+    asset: "TRC20",
+    limit: 1,
+    maxPages: 2,
+    fetchPage: async (_address, options) => {
+      calls.push(options);
+      return {
+        deposits: [{ txHash: `page-${calls.length}` }],
+        fingerprint: `cursor-${calls.length + 1}`,
+      };
+    },
+  });
+
+  assert.equal(result.truncated, true);
+  assert.equal(result.nextFingerprintAvailable, true);
+  assert.equal(result.pageCount, 2);
+  assert.deepEqual(
+    result.deposits.map((deposit) => deposit.txHash),
+    ["page-1", "page-2"]
+  );
+  assert.deepEqual(
+    calls.map((call) => call.fingerprint),
+    [null, "cursor-2"]
+  );
+});
+
+test("paginated inbound transfer fetch does not request another page without cursor", async () => {
+  let calls = 0;
+  const result = await fetchPaginatedInboundTransfers({
+    address: "TTreasury111111111111111111111111111",
+    asset: "TRX",
+    limit: 50,
+    maxPages: 20,
+    fetchPage: async () => {
+      calls += 1;
+      return {
+        deposits: [],
+        fingerprint: "",
+      };
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.pageCount, 1);
+  assert.equal(result.truncated, false);
+});
+
+test("configured treasury scan returns and logs truncation warnings", async () => {
+  process.env.TREASURY_TRON_ADDRESS = "TTreasury111111111111111111111111111";
+  delete process.env.EXCHANGE_TREASURY_TRON_ADDRESS;
+  const warnMessages = [];
+  const trxCalls = [];
+  const trc20Calls = [];
+
+  console.warn = (message) => {
+    warnMessages.push(message);
+  };
+  tronGridClient.fetchInboundTrxTransfers = async (_address, options) => {
+    trxCalls.push(options);
+    return { deposits: [], fingerprint: `trx-cursor-${trxCalls.length}` };
+  };
+  tronGridClient.fetchInboundTrc20Transfers = async (_address, options) => {
+    trc20Calls.push(options);
+    return { deposits: [], fingerprint: null };
+  };
+
+  const result = await scanConfiguredTreasury({
+    limit: 1,
+    maxPages: 2,
+  });
+
+  assert.equal(result.scanned, 0);
+  assert.equal(result.truncated, true);
+  assert.equal(result.truncationWarnings.length, 1);
+  assert.equal(result.truncationWarnings[0].asset, "TRX");
+  assert.equal(result.truncationWarnings[0].pageCount, 2);
+  assert.equal(warnMessages.length, 1);
+  assert.match(warnMessages[0], /reached 2 pages/);
+  assert.deepEqual(
+    trxCalls.map((call) => call.fingerprint),
+    [null, "trx-cursor-1"]
+  );
+  assert.equal(trc20Calls.length, 1);
+  assert.deepEqual(
+    result.pageSummaries.map((summary) => ({
+      asset: summary.asset,
+      pageCount: summary.pageCount,
+      truncated: summary.truncated,
+    })),
+    [
+      { asset: "TRX", pageCount: 2, truncated: true },
+      { asset: "TRC20", pageCount: 1, truncated: false },
+    ]
   );
 });

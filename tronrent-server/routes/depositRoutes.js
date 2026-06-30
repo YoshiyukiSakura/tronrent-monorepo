@@ -12,6 +12,7 @@ router.post("/scan", async (req, res) => {
     const result = await depositWatcherService.scanConfiguredTreasury({
       limit: req.body.limit,
       minTimestamp: req.body.minTimestamp,
+      maxPages: req.body.maxPages,
       processProviderJobs: req.body.processProviderJobs === true,
       processExchangePayouts: req.body.processExchangePayouts === true,
     });
