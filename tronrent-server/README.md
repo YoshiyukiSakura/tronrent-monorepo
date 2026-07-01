@@ -381,6 +381,22 @@ npm test
 node --check app.js
 ```
 
+`tests/e2e.dryRun.test.js` is a Postgres-backed dry-run proof for the light
+asset automation path. Without `TEST_DATABASE_URL`, it is skipped by the normal
+test suite. To run it against a throwaway database:
+
+```bash
+createdb tronrent_test
+TEST_DATABASE_URL=postgresql://tronrent_user:your_password@localhost:5432/tronrent_test \
+  npm run test:e2e:dry-run
+```
+
+The test resets only databases whose name includes `test`, `e2e`, or `ci` as a
+separated token. It creates real energy and exchange orders, feeds fixed
+TronGrid deposit events, and verifies that the real deposit watcher drives
+dry-run provider fulfillment and both TRX->USDT and USDT->TRX payout jobs
+without live APITRX calls or wallet broadcasts.
+
 ## License
 
 ISC
