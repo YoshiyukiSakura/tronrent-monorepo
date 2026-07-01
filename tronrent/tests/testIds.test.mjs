@@ -84,6 +84,16 @@ test("rent page exposes proof selectors for browser smoke tests", () => {
   );
 });
 
+test("rent page explains the 65k USDT transfer-unit plan framing", () => {
+  const source = readSource("src/app/rent/page.tsx");
+
+  assert.match(source, /function formatTransferCount/);
+  assert.match(source, /65_000/);
+  assert.match(source, /≈ \$\{transferCount\} 笔 USDT 转账/);
+  assert.match(source, /首次收款或无 USDT/);
+  assert.match(source, /APITRX 成本与毛利/);
+});
+
 test("exchange page exposes proof selectors for browser smoke tests", () => {
   const source = readSource("src/app/exchange/page.tsx");
   assert.match(

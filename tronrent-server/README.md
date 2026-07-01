@@ -149,6 +149,16 @@ provider or payout review endpoints for reconciliation.
 GET /api/catalog/plans
 ```
 
+The default energy catalog is framed around USDT-TRC20 transfer units:
+
+- `basic`: 65,000 energy, about 1 USDT transfer.
+- `standard`: 131,000 energy, about 2 transfers or one safer first-time
+  recipient transfer.
+- `enterprise`: 650,000 energy, about 10 transfers.
+
+All default plans use a 1-hour duration and fixed operator-set retail pricing.
+Review APITRX sourcing cost and margin before production.
+
 ### Orders
 
 ```http

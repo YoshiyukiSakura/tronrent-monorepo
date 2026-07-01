@@ -15,6 +15,8 @@ when public treasury or token allowlists are missing.
 
 - **Energy rental orders**: Users choose a server-priced energy plan, enter the
   target Tron address, and receive exact TRX payment instructions.
+- **USDT transfer-unit plans**: Rental plans are displayed as approximate USDT
+  transfer counts, using the 65k energy unit common for TRC20 transfer flows.
 - **Two payment paths**: Orders support connected-wallet payment to the treasury
   or manual transfer to the displayed treasury address and unique amount.
 - **TRX/USDT exchange orders**: Users can quote and create TRX-to-USDT or

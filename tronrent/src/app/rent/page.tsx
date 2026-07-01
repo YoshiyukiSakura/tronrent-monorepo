@@ -51,6 +51,11 @@ function formatEnergy(energyAmount: number) {
   return energyAmount.toLocaleString("zh-CN");
 }
 
+function formatTransferCount(energyAmount: number) {
+  const transferCount = Math.max(1, Math.round(energyAmount / 65_000));
+  return `≈ ${transferCount} 笔 USDT 转账`;
+}
+
 export default function RentPage() {
   const { address, isConnected, connect, tronWeb } = useWallet();
   const [plans, setPlans] = useState<EnergyPlan[]>([]);
@@ -439,6 +444,10 @@ export default function RentPage() {
                     </span>
                     <span className="flex items-center gap-2 mb-2 text-sm">
                       <FaCheck className="text-green-500" />
+                      {formatTransferCount(plan.energyAmount)}
+                    </span>
+                    <span className="flex items-center gap-2 mb-2 text-sm">
+                      <FaCheck className="text-green-500" />
                       {formatDuration(plan.durationHours)}租赁期
                     </span>
                     <span className="flex items-center gap-2 text-sm">
@@ -454,6 +463,11 @@ export default function RentPage() {
                     />
                   </button>
                 ))}
+              </div>
+              <div className="mt-4 rounded-md border border-[#30363d] bg-[#0d1117] p-4 text-sm text-gray-300">
+                能量消耗为估算值；向首次收款或无 USDT
+                余额地址转账通常需要约 2 倍能量。套餐价格为运营方固定零售价，上线前需复核
+                APITRX 成本与毛利。
               </div>
             </section>
 
