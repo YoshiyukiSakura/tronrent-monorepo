@@ -15,10 +15,12 @@ import RecentOrdersPanel from "@/components/RecentOrdersPanel";
 import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
 import {
+  CreateEnergyPaymentMethod,
+  DirectPayEnergyConfig,
   EnergyPlan,
-  PaymentMethod,
   TronRentOrder,
   createEnergyOrder,
+  fetchDirectPayEnergyConfig,
   fetchEnergyPlans,
   getEnergyOrder,
 } from "@/lib/tronrentApi";
@@ -60,9 +62,12 @@ export default function RentPage() {
   const { address, isConnected, connect, tronWeb } = useWallet();
   const [plans, setPlans] = useState<EnergyPlan[]>([]);
   const [plansError, setPlansError] = useState<string | null>(null);
+  const [directPayConfig, setDirectPayConfig] =
+    useState<DirectPayEnergyConfig | null>(null);
+  const [directPayError, setDirectPayError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] =
-    useState<PaymentMethod>("wallet_connect");
+    useState<CreateEnergyPaymentMethod>("wallet_connect");
   const [targetAddress, setTargetAddress] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<TronRentOrder | null>(null);
@@ -155,6 +160,25 @@ export default function RentPage() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    fetchDirectPayEnergyConfig()
+      .then((config) => {
+        if (!isMounted) return;
+        setDirectPayConfig(config);
+        setDirectPayError(null);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setDirectPayError(error.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setRecentOrders(readRecentOrders("energy"));
 
     if (hydratedOrderRef.current) {
@@ -209,6 +233,11 @@ export default function RentPage() {
   const activePlan = useMemo(
     () => plans.find((plan) => plan.id === selectedPlan) || null,
     [plans, selectedPlan]
+  );
+  const canShowDirectPay = Boolean(
+    directPayConfig?.configured &&
+      directPayConfig.treasuryAddress &&
+      directPayConfig.plans.length > 0
   );
 
   const copyText = async (field: string, value: string | null) => {
@@ -469,6 +498,91 @@ export default function RentPage() {
                 余额地址转账通常需要约 2 倍能量。套餐价格为运营方固定零售价，上线前需复核
                 APITRX 成本与毛利。
               </div>
+              <ProofSelectorRegion
+                testId={FRONTEND_TEST_IDS.rentDirectPayPanel}
+                className="mt-6 rounded-md border border-[#30363d] bg-[#161b22] p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-bold">直接打款租能</h3>
+                    <p className="mt-1 text-sm text-gray-300">
+                      不预创建订单，按下方固定金额转入后由链上扫描自动识别。
+                    </p>
+                  </div>
+                  <span className="rounded-md border border-[#30363d] px-3 py-1 text-xs text-gray-300">
+                    {canShowDirectPay ? "已配置" : "未配置"}
+                  </span>
+                </div>
+
+                {directPayError && (
+                  <div className="mt-4 rounded-md border border-[#f05e23] bg-[#1e2430] p-3 text-sm text-orange-200">
+                    直付配置暂不可用：{directPayError}
+                  </div>
+                )}
+
+                {canShowDirectPay && directPayConfig?.treasuryAddress ? (
+                  <div className="mt-4 space-y-4">
+                    <ProofSelectorRegion
+                      testId={FRONTEND_TEST_IDS.rentDirectPayAddress}
+                    >
+                      <InstructionRow
+                        label="直付收款地址"
+                        value={directPayConfig.treasuryAddress}
+                        copied={copiedField === "direct-pay-address"}
+                        onCopy={() =>
+                          copyText(
+                            "direct-pay-address",
+                            directPayConfig.treasuryAddress
+                          )
+                        }
+                      />
+                    </ProofSelectorRegion>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {directPayConfig.plans.map((plan) => (
+                        <ProofSelectorRegion
+                          key={plan.planId}
+                          testId={FRONTEND_TEST_IDS.rentDirectPayAmount}
+                          className="rounded-md border border-[#30363d] bg-[#0d1117] p-4"
+                        >
+                          <div className="text-sm font-semibold text-white">
+                            {plan.name}
+                          </div>
+                          <div className="mt-1 text-2xl font-bold">
+                            {plan.amountDisplay}
+                          </div>
+                          <div className="mt-2 text-xs text-gray-400">
+                            {formatEnergy(plan.energyAmount)} 能量 ·{" "}
+                            {formatDuration(plan.durationHours)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyText(
+                                `direct-pay-amount-${plan.planId}`,
+                                plan.amountSun
+                              )
+                            }
+                            className="mt-3 rounded-md border border-[#30363d] px-3 py-2 text-xs text-gray-200 hover:border-[#f05e23]"
+                          >
+                            {copiedField === `direct-pay-amount-${plan.planId}`
+                              ? "已复制"
+                              : "复制 SUN 金额"}
+                          </button>
+                        </ProofSelectorRegion>
+                      ))}
+                    </div>
+
+                    <div className="rounded-md border border-orange-800 bg-orange-950/30 p-3 text-sm text-orange-100">
+                      必须转入完全相同的 TRX 金额；能量会发到转出钱包地址，不支持交易所或第三方代付地址。
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-md border border-[#30363d] bg-[#0d1117] p-3 text-sm text-gray-400">
+                    直付租能尚未开放，仍可使用右侧订单付款方式。
+                  </div>
+                )}
+              </ProofSelectorRegion>
             </section>
 
             <aside className="rounded-lg border border-[#30363d] bg-[#161b22] p-6">

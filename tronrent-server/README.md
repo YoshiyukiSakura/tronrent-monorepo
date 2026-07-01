@@ -160,6 +160,7 @@ plan prices remain unmatched.
 
 ```http
 GET /api/catalog/plans
+GET /api/catalog/direct-pay-energy
 ```
 
 The default energy catalog is framed around USDT-TRC20 transfer units:
@@ -171,6 +172,12 @@ The default energy catalog is framed around USDT-TRC20 transfer units:
 
 All default plans use a 1-hour duration and fixed operator-set retail pricing.
 Review APITRX sourcing cost and margin before production.
+
+`GET /api/catalog/direct-pay-energy` returns only fixed TRX plan amounts that
+the deposit watcher can auto-match for orderless direct-pay rental. If
+`TREASURY_TRON_ADDRESS` is missing, it returns `configured=false` and no plans.
+Plans with non-TRX pricing or duplicate fixed amounts are excluded so the UI
+does not advertise an amount that would become `unmatched_ambiguous`.
 
 ### Orders
 

@@ -11,6 +11,9 @@ export const FRONTEND_TEST_IDS: Readonly<{
   rentPaymentAmount: string;
   rentPaymentAddress: string;
   rentPaymentReference: string;
+  rentDirectPayPanel: string;
+  rentDirectPayAddress: string;
+  rentDirectPayAmount: string;
   rentPollingError: string;
   exchangeCreateOrderCta: string;
   exchangeDepositInstructions: string;

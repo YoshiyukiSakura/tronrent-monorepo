@@ -19,6 +19,8 @@ when public treasury or token allowlists are missing.
   transfer counts, using the 65k energy unit common for TRC20 transfer flows.
 - **Two payment paths**: Orders support connected-wallet payment to the treasury
   or manual transfer to the displayed treasury address and unique amount.
+- **Direct-pay rental amounts**: When configured, `/rent` also shows fixed TRX
+  amounts that can auto-create a paid energy order for the sending address.
 - **TRX/USDT exchange orders**: Users can quote and create TRX-to-USDT or
   USDT-to-TRX orders, then deposit the exact required asset amount.
 - **Wallet transaction helpers**: TronLink can initiate TRX and allowlisted USDT
@@ -78,7 +80,9 @@ browser smoke tests:
   `rent-wallet-payment-cta`, `rent-wallet-payment-txid`,
   `rent-payment-method-wallet`, `rent-payment-method-deposit`,
   `rent-payment-amount`, `rent-payment-address`,
-  `rent-payment-reference`, `rent-polling-error`
+  `rent-payment-reference`, `rent-direct-pay-panel`,
+  `rent-direct-pay-address`, `rent-direct-pay-amount`,
+  `rent-polling-error`
 - Exchange: `exchange-create-order-cta`, `exchange-deposit-instructions`,
   `exchange-order-id`, `exchange-order-status`, `exchange-refresh-status`,
   `exchange-wallet-deposit-cta`, `exchange-wallet-deposit-txid`,

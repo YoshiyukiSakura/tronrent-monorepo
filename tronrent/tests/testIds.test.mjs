@@ -78,6 +78,9 @@ test("rent page exposes proof selectors for browser smoke tests", () => {
   assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentAmount}/);
   assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentAddress}/);
   assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentReference}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentDirectPayPanel}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentDirectPayAddress}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentDirectPayAmount}/);
   assert.match(
     source,
     /<ProofPollingError[\s\S]*?testId={FRONTEND_TEST_IDS\.rentPollingError}/

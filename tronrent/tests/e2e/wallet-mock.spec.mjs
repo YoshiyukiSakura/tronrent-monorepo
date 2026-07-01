@@ -189,6 +189,33 @@ async function installApiRoutes(page) {
       return;
     }
 
+    if (path === "/api/catalog/direct-pay-energy") {
+      await fulfillJson(
+        route,
+        envelope({
+          configured: true,
+          asset: "TRX",
+          treasuryAddress: E2E_TREASURY_ADDRESS,
+          plans: [
+            {
+              planId: "starter",
+              name: "Starter",
+              description: "E2E energy plan",
+              energyAmount: 65000,
+              durationHours: 1,
+              amountSun: "2340000",
+              amountDisplay: "2.34 TRX",
+              warnings: [
+                "Pay the exact displayed TRX amount.",
+                "Energy is delivered to the sending wallet address.",
+              ],
+            },
+          ],
+        })
+      );
+      return;
+    }
+
     if (path === "/api/orders" && request.method() === "POST") {
       const body = JSON.parse(request.postData() || "{}");
       lastEnergyPaymentMethod = body.paymentMethod || "wallet_connect";
@@ -246,6 +273,24 @@ async function waitForMockWallet(page) {
 
 test.beforeEach(async ({ page }) => {
   await installApiRoutes(page);
+});
+
+test("rent page exposes direct-pay energy amounts and treasury address", async ({
+  page,
+}) => {
+  await page.goto("/rent");
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentDirectPayPanel)).toContainText(
+    "直接打款租能"
+  );
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentDirectPayAddress)).toContainText(
+    E2E_TREASURY_ADDRESS
+  );
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentDirectPayAmount)).toContainText(
+    "2.34 TRX"
+  );
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentDirectPayPanel)).toContainText(
+    "转出钱包地址"
+  );
 });
 
 test("rent wallet payment broadcasts through dev wallet mock without settling order", async ({

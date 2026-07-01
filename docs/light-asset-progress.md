@@ -16,6 +16,9 @@ wallet automation.
   and exact unique amount, including per-order sun offsets.
 - Orderless direct-pay rental deposits can create paid energy orders when a TRX
   transfer to `TREASURY_TRON_ADDRESS` exactly equals one catalog base price.
+- The public catalog exposes only direct-pay amounts that the matcher can
+  safely auto-handle, and the rent page shows the treasury address and exact
+  fixed amounts when configured.
 - Matched paid rental orders can trigger provider jobs after a deposit scan.
 - Provider execution is dry-run by default and only calls APITRX when live gates
   and secrets are configured.
@@ -50,8 +53,8 @@ The first backend slice is implemented with these boundaries:
 - Do not infer energy targets for TRC20 transfers, exchange deposits, memo-less
   third-party senders, or custodial exchange withdrawals.
 
-There is not yet a user-facing page that advertises the direct-pay amounts or
-explains the sender-address caveat.
+The rent page now advertises the direct-pay amounts and explains the
+sender-address caveat. It still does not create an order upfront for this path.
 
 ## Acceptance Criteria
 
@@ -91,8 +94,6 @@ order fields, write `matchedOrderId`, reject ambiguous plan prices, and validate
 
 ## Remaining Gaps
 
-- Add a user-facing direct-pay rental view that clearly says energy is delivered
-  to the sending address.
 - Add operator/refund handling for unmatched direct deposits and custodial
   exchange withdrawals.
 - Run DB-backed E2E with `TEST_DATABASE_URL` before treating the direct-pay path

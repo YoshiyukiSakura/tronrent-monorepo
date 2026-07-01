@@ -67,9 +67,53 @@ function getEnergyPlan(planId) {
   return plan ? serializePlan(plan) : null;
 }
 
+function listDirectPayEnergyPlans({
+  env = process.env,
+  plans = listEnergyPlans(),
+} = {}) {
+  const treasuryAddress = String(env.TREASURY_TRON_ADDRESS || "").trim();
+  if (!treasuryAddress) {
+    return {
+      configured: false,
+      asset: "TRX",
+      treasuryAddress: null,
+      plans: [],
+    };
+  }
+
+  const trxPlans = plans.filter((plan) => plan.paymentAsset === "TRX");
+  const priceCounts = trxPlans.reduce((counts, plan) => {
+    counts.set(plan.priceSun, (counts.get(plan.priceSun) || 0) + 1);
+    return counts;
+  }, new Map());
+
+  return {
+    configured: true,
+    asset: "TRX",
+    treasuryAddress,
+    plans: trxPlans
+      .filter((plan) => priceCounts.get(plan.priceSun) === 1)
+      .map((plan) => ({
+        planId: plan.id,
+        name: plan.name,
+        description: plan.description,
+        energyAmount: plan.energyAmount,
+        durationHours: plan.durationHours,
+        amountSun: plan.priceSun,
+        amountDisplay: plan.priceDisplay,
+        warnings: [
+          "Pay the exact displayed TRX amount; any different amount will not auto-create an order.",
+          "Energy is delivered to the sending wallet address.",
+          "Do not pay from custodial exchanges or third-party wallets.",
+        ],
+      })),
+  };
+}
+
 module.exports = {
   ENERGY_PLANS,
   getEnergyPlan,
+  listDirectPayEnergyPlans,
   listEnergyPlans,
   sunToTrxString,
 };

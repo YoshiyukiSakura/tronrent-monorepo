@@ -11,7 +11,26 @@ export type EnergyPlan = {
   isPopular: boolean;
 };
 
-export type PaymentMethod = "wallet_connect" | "deposit_address";
+export type DirectPayEnergyPlan = {
+  planId: string;
+  name: string;
+  description: string;
+  energyAmount: number;
+  durationHours: number;
+  amountSun: string;
+  amountDisplay: string;
+  warnings: string[];
+};
+
+export type DirectPayEnergyConfig = {
+  configured: boolean;
+  asset: "TRX";
+  treasuryAddress: string | null;
+  plans: DirectPayEnergyPlan[];
+};
+
+export type CreateEnergyPaymentMethod = "wallet_connect" | "deposit_address";
+export type PaymentMethod = CreateEnergyPaymentMethod | "chain_deposit";
 export type ExchangeDirection = "TRX_TO_USDT" | "USDT_TO_TRX";
 
 export type TronRentOrder = {
@@ -193,11 +212,15 @@ export async function fetchEnergyPlans() {
   return requestJson<EnergyPlan[]>("/api/catalog/plans");
 }
 
+export async function fetchDirectPayEnergyConfig() {
+  return requestJson<DirectPayEnergyConfig>("/api/catalog/direct-pay-energy");
+}
+
 export async function createEnergyOrder(input: {
   planId: string;
   targetAddress: string;
   customerWalletAddress: string | null;
-  paymentMethod: PaymentMethod;
+  paymentMethod: CreateEnergyPaymentMethod;
 }) {
   const idempotencyKey =
     typeof crypto !== "undefined" && "randomUUID" in crypto
