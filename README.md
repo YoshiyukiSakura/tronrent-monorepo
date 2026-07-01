@@ -23,6 +23,11 @@ npm run lint:web
 npm run start:server
 ```
 
+## Product Progress
+
+The active light-asset automation direction and direct-pay energy rental gap are
+tracked in `docs/light-asset-progress.md`.
+
 Server Docker helpers:
 
 ```bash
