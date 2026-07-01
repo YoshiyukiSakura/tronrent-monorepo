@@ -131,6 +131,7 @@ test(
     const exchangeOrderService = require("../services/exchangeOrderService");
     const depositWatcherService = require("../services/depositWatcherService");
     const tronGridClient = require("../services/tronGridClient");
+    const { DEPOSIT_STATUSES } = depositWatcherService;
     const {
       ORDER_STATUSES,
       PAYMENT_STATUSES,
@@ -207,6 +208,12 @@ test(
             toAddress: treasuryAddress,
             amountBaseUnits: energyOrder.priceAmountSun,
           }),
+          buildTrxDeposit({
+            txHash: "e2e-direct-energy-payment",
+            fromAddress: fixtureAddress(9),
+            toAddress: treasuryAddress,
+            amountBaseUnits: "8000000",
+          }),
         ],
       ],
       [
@@ -253,18 +260,21 @@ test(
       processExchangePayouts: true,
     });
 
-    assert.equal(scanResult.scanned, 3);
-    assert.equal(scanResult.created, 3);
-    assert.equal(scanResult.matched, 3);
+    assert.equal(scanResult.scanned, 4);
+    assert.equal(scanResult.created, 4);
+    assert.equal(scanResult.matched, 4);
     assert.equal(scanResult.truncated, false);
     assert.equal(scanResult.postMatchProcessing.provider.triggered, true);
-    assert.equal(scanResult.postMatchProcessing.provider.attempted, 1);
+    assert.equal(scanResult.postMatchProcessing.provider.attempted, 2);
     assert.equal(scanResult.postMatchProcessing.provider.succeeded, true);
     assert.equal(scanResult.postMatchProcessing.exchangePayout.triggered, true);
     assert.equal(scanResult.postMatchProcessing.exchangePayout.attempted, 2);
     assert.equal(scanResult.postMatchProcessing.exchangePayout.succeeded, true);
-    assert.equal(scanResult.providerResults.length, 1);
-    assert.equal(scanResult.providerResults[0].success, true);
+    assert.equal(scanResult.providerResults.length, 2);
+    assert.deepEqual(
+      scanResult.providerResults.map((result) => result.success),
+      [true, true]
+    );
     assert.equal(scanResult.exchangePayoutResults.length, 2);
     assert.deepEqual(
       scanResult.exchangePayoutResults.map((result) => result.success),
@@ -286,6 +296,32 @@ test(
     assert.equal(providerJob.dryRun, true);
     assert.equal(providerJob.response.dryRun, true);
     assert.equal(providerJob.response.upstreamOrderId, `dry-run-${energyOrder.id}`);
+
+    const directEnergyOrder = await db.Order.findOne({
+      where: { idempotencyKey: "direct-deposit:tron:e2e-direct-energy-payment:0:native" },
+    });
+    assert.ok(directEnergyOrder);
+    assert.equal(directEnergyOrder.status, ORDER_STATUSES.FULFILLED);
+    assert.equal(directEnergyOrder.planId, "standard");
+    assert.equal(directEnergyOrder.targetAddress, fixtureAddress(9));
+    assert.equal(directEnergyOrder.paymentMethod, "chain_deposit");
+    assert.equal(directEnergyOrder.priceOffsetSun, 0);
+    assert.equal(directEnergyOrder.metadata.orderSource, "direct_deposit");
+
+    const directPayment = await db.Payment.findOne({
+      where: { orderId: directEnergyOrder.id },
+    });
+    const directDeposit = await db.ChainDeposit.findOne({
+      where: { matchedOrderId: directEnergyOrder.id },
+    });
+    const directProviderJob = await db.ProviderJob.findOne({
+      where: { orderId: directEnergyOrder.id },
+    });
+    assert.equal(directPayment.status, PAYMENT_STATUSES.CONFIRMED);
+    assert.equal(String(directPayment.receivedAmountSun), "8000000");
+    assert.equal(directPayment.metadata.matchedBy, "direct_plan_amount");
+    assert.equal(directDeposit.status, DEPOSIT_STATUSES.MATCHED);
+    assert.equal(directProviderJob.status, PROVIDER_JOB_STATUSES.COMPLETED);
 
     for (const exchangeOrder of [trxExchangeOrder, usdtExchangeOrder]) {
       const persistedExchangeOrder = await db.ExchangeOrder.findByPk(

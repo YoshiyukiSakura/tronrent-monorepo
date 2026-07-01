@@ -14,6 +14,7 @@ const providerJobService = require("../services/providerJobService");
 const tronGridClient = require("../services/tronGridClient");
 const {
   assertDepositScanRouteEnabled,
+  classifyDirectEnergyDeposit,
   classifyExchangeDepositMatch,
   depositMatchesExchangeOrder,
   fetchPaginatedInboundTransfers,
@@ -63,6 +64,10 @@ function makeCandidate(overrides = {}) {
         overrides.expiresAt || new Date(Date.now() + 60_000).toISOString(),
     },
   };
+}
+
+function fixtureAddress(seed) {
+  return `T${String(seed).repeat(33)}`;
 }
 
 test("matches a single active payment candidate by exact unique amount", () => {
@@ -238,6 +243,84 @@ test("exchange USDT deposit requires the pinned contract", () => {
 
   assert.equal(depositMatchesExchangeOrder(deposit, order), true);
   assert.equal(depositMatchesExchangeOrder(deposit, wrongContractOrder), false);
+});
+
+test("direct energy deposit matches exact base-price TRX sent to the energy treasury", () => {
+  process.env.TREASURY_TRON_ADDRESS = fixtureAddress(1);
+
+  const result = classifyDirectEnergyDeposit({
+    asset: "TRX",
+    toAddress: fixtureAddress(1),
+    fromAddress: fixtureAddress(2),
+    amountBaseUnits: "4000000",
+  });
+
+  assert.equal(result.status, DEPOSIT_STATUSES.MATCHED);
+  assert.equal(result.plan.id, "basic");
+  assert.equal(result.targetAddress, fixtureAddress(2));
+});
+
+test("direct energy deposit is gated to energy treasury TRX and a valid sender", () => {
+  process.env.TREASURY_TRON_ADDRESS = fixtureAddress(1);
+
+  assert.equal(
+    classifyDirectEnergyDeposit({
+      asset: "TRX",
+      toAddress: fixtureAddress(9),
+      fromAddress: fixtureAddress(2),
+      amountBaseUnits: "4000000",
+    }).status,
+    DEPOSIT_STATUSES.UNMATCHED
+  );
+  assert.equal(
+    classifyDirectEnergyDeposit({
+      asset: "TRC20",
+      toAddress: fixtureAddress(1),
+      fromAddress: fixtureAddress(2),
+      amountBaseUnits: "4000000",
+    }).status,
+    DEPOSIT_STATUSES.UNMATCHED
+  );
+  assert.equal(
+    classifyDirectEnergyDeposit({
+      asset: "TRX",
+      toAddress: fixtureAddress(1),
+      fromAddress: "not-a-tron-address",
+      amountBaseUnits: "4000000",
+    }).status,
+    DEPOSIT_STATUSES.UNMATCHED
+  );
+  assert.equal(
+    classifyDirectEnergyDeposit({
+      asset: "TRX",
+      toAddress: fixtureAddress(1),
+      fromAddress: fixtureAddress(2),
+      amountBaseUnits: "4000001",
+    }).status,
+    DEPOSIT_STATUSES.UNMATCHED
+  );
+});
+
+test("direct energy deposit refuses ambiguous plan prices", () => {
+  process.env.TREASURY_TRON_ADDRESS = fixtureAddress(1);
+
+  const result = classifyDirectEnergyDeposit(
+    {
+      asset: "TRX",
+      toAddress: fixtureAddress(1),
+      fromAddress: fixtureAddress(2),
+      amountBaseUnits: "4000000",
+    },
+    {
+      plans: [
+        { id: "basic-a", paymentAsset: "TRX", priceSun: "4000000" },
+        { id: "basic-b", paymentAsset: "TRX", priceSun: "4000000" },
+      ],
+    }
+  );
+
+  assert.equal(result.status, DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS);
+  assert.equal(result.candidates.length, 2);
 });
 
 test("deposit key distinguishes multiple transfer events in one transaction", () => {

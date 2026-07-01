@@ -8,6 +8,7 @@ const {
   Payment,
   sequelize,
 } = require("../db/models");
+const { listEnergyPlans } = require("../config/plans");
 const { requireEnabledAdminRoute } = require("../utils/adminRouteGate");
 const { createHttpError } = require("../utils/httpErrors");
 const {
@@ -15,6 +16,7 @@ const {
   PAYMENT_STATUSES,
   assertOrderTransition,
 } = require("./orderState");
+const { isValidTronAddress } = require("./orderService");
 const {
   DEPOSIT_STATUSES,
   buildDepositKey,
@@ -31,6 +33,8 @@ const providerJobService = require("./providerJobService");
 const tronGridClient = require("./tronGridClient");
 
 let scanInProgress = false;
+const DIRECT_DEPOSIT_PAYMENT_METHOD = "chain_deposit";
+const DIRECT_DEPOSIT_ORDER_SOURCE = "direct_deposit";
 
 function normalizeAddress(address) {
   return address ? String(address).trim() : null;
@@ -332,6 +336,141 @@ async function findCandidateExchangeOrders(deposit, transaction) {
   });
 }
 
+function classifyDirectEnergyDeposit(
+  deposit,
+  { plans = listEnergyPlans(), env = process.env } = {}
+) {
+  const treasuryAddress = normalizeAddress(env.TREASURY_TRON_ADDRESS);
+  const targetAddress = normalizeAddress(deposit.fromAddress);
+
+  if (
+    deposit.asset !== "TRX" ||
+    !treasuryAddress ||
+    normalizeAddress(deposit.toAddress) !== treasuryAddress ||
+    !isValidTronAddress(targetAddress)
+  ) {
+    return {
+      status: DEPOSIT_STATUSES.UNMATCHED,
+      candidates: [],
+    };
+  }
+
+  const matchingPlans = plans.filter(
+    (plan) =>
+      plan.paymentAsset === "TRX" &&
+      String(plan.priceSun) === String(deposit.amountBaseUnits)
+  );
+
+  if (matchingPlans.length === 1) {
+    return {
+      status: DEPOSIT_STATUSES.MATCHED,
+      plan: matchingPlans[0],
+      targetAddress,
+    };
+  }
+
+  if (matchingPlans.length > 1) {
+    return {
+      status: DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS,
+      candidates: matchingPlans,
+    };
+  }
+
+  return {
+    status: DEPOSIT_STATUSES.UNMATCHED,
+    candidates: [],
+  };
+}
+
+async function createDirectEnergyOrderFromDeposit({
+  chainDeposit,
+  deposit,
+  plan,
+  targetAddress,
+  transaction,
+}) {
+  const now = new Date();
+  const paymentReference = `DD-${deposit.depositKey}`;
+  const createdOrder = await Order.create(
+    {
+      idempotencyKey: `direct-deposit:${deposit.depositKey}`,
+      planId: plan.id,
+      targetAddress,
+      customerWalletAddress: targetAddress,
+      paymentMethod: DIRECT_DEPOSIT_PAYMENT_METHOD,
+      status: ORDER_STATUSES.PAID,
+      paymentAsset: plan.paymentAsset,
+      priceAmountSun: String(plan.priceSun),
+      basePriceAmountSun: String(plan.priceSun),
+      priceOffsetSun: 0,
+      energyAmount: plan.energyAmount,
+      durationHours: plan.durationHours,
+      treasuryAddress: deposit.toAddress,
+      depositAddress: deposit.toAddress,
+      paymentReference,
+      expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
+      paidAt: now,
+      metadata: {
+        planName: plan.name,
+        planDescription: plan.description,
+        basePriceAmountSun: String(plan.priceSun),
+        priceOffsetSun: 0,
+        paymentConfigured: true,
+        providerLiveAtCreation: process.env.PROVIDER_LIVE === "true",
+        orderSource: DIRECT_DEPOSIT_ORDER_SOURCE,
+        chainDepositKey: deposit.depositKey,
+      },
+    },
+    { transaction }
+  );
+
+  const payment = await Payment.create(
+    {
+      orderId: createdOrder.id,
+      method: DIRECT_DEPOSIT_PAYMENT_METHOD,
+      asset: plan.paymentAsset,
+      expectedAmountSun: String(plan.priceSun),
+      receivedAmountSun: String(deposit.amountBaseUnits),
+      status: PAYMENT_STATUSES.CONFIRMED,
+      txHash: deposit.txHash,
+      fromAddress: deposit.fromAddress,
+      toAddress: deposit.toAddress,
+      detectedAt: deposit.blockTimestamp || now,
+      confirmedAt: now,
+      metadata: {
+        paymentReference,
+        paymentConfigured: true,
+        chainDepositKey: deposit.depositKey,
+        matchedBy: "direct_plan_amount",
+        orderSource: DIRECT_DEPOSIT_ORDER_SOURCE,
+      },
+    },
+    { transaction }
+  );
+
+  await chainDeposit.update(
+    {
+      status: DEPOSIT_STATUSES.MATCHED,
+      matchedOrderId: createdOrder.id,
+      matchedPaymentId: payment.id,
+      raw: {
+        ...deposit.raw,
+        directDeposit: {
+          matchedBy: "direct_plan_amount",
+          planId: plan.id,
+          orderSource: DIRECT_DEPOSIT_ORDER_SOURCE,
+        },
+      },
+    },
+    { transaction }
+  );
+
+  return {
+    order: createdOrder,
+    payment,
+  };
+}
+
 async function fetchPaginatedInboundTransfers({
   address,
   asset,
@@ -546,13 +685,47 @@ async function recordAndMatchDeposit(inputDeposit) {
       exchangeCandidates
     );
 
-    if (exchangeClassification.status !== DEPOSIT_STATUSES.MATCHED) {
+    if (
+      exchangeClassification.status !== DEPOSIT_STATUSES.MATCHED &&
+      exchangeClassification.status !== DEPOSIT_STATUSES.UNMATCHED
+    ) {
       await chainDeposit.update(
         {
           status: exchangeClassification.status,
           raw: {
             ...deposit.raw,
             candidateCount: exchangeClassification.candidates?.length || 0,
+          },
+        },
+        { transaction }
+      );
+      return chainDeposit;
+    }
+
+    if (exchangeClassification.status === DEPOSIT_STATUSES.UNMATCHED) {
+      const directEnergyClassification = classifyDirectEnergyDeposit(deposit);
+
+      if (directEnergyClassification.status === DEPOSIT_STATUSES.MATCHED) {
+        const { order, payment } = await createDirectEnergyOrderFromDeposit({
+          chainDeposit,
+          deposit,
+          plan: directEnergyClassification.plan,
+          targetAddress: directEnergyClassification.targetAddress,
+          transaction,
+        });
+
+        matchedOrderId = order.id;
+        matchedPaymentId = payment.id;
+        return chainDeposit;
+      }
+
+      await chainDeposit.update(
+        {
+          status: directEnergyClassification.status,
+          raw: {
+            ...deposit.raw,
+            candidateCount:
+              directEnergyClassification.candidates?.length || 0,
           },
         },
         { transaction }
@@ -700,6 +873,7 @@ module.exports = {
   DEPOSIT_STATUSES,
   assertDepositScanRouteEnabled,
   buildDepositKey,
+  classifyDirectEnergyDeposit,
   classifyExchangeDepositMatch,
   classifyDepositMatch,
   depositMatchesExchangeOrder,

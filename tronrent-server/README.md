@@ -13,6 +13,8 @@ slice of the energy-rental business flow:
 - Unique per-order payable tail amounts for shared treasury matching.
 - Chain deposit watcher records confirmed Tron inbound deposits and matches only
   unambiguous payments.
+- Orderless direct-pay TRX deposits can create paid energy orders when the
+  amount exactly matches one catalog base price.
 - Dev-only payment confirmation behind an explicit environment gate.
 - Dry-run provider jobs for energy fulfillment, plus a gated apitrx adapter.
 - TRX/USDT exchange quotes, deposit orders, and gated payout jobs.
@@ -143,6 +145,14 @@ post-match processor was triggered, how many matched order IDs were attempted,
 whether it succeeded, and a sanitized error code/message if processor setup
 failed. Matching remains durable even if a post-match processor fails; use the
 provider or payout review endpoints for reconciliation.
+
+The scanner also supports a narrow direct-pay energy path. After existing
+energy payments and exchange orders fail to match, a TRX deposit to
+`TREASURY_TRON_ADDRESS` whose amount exactly equals one catalog plan base price
+creates a paid energy order with `paymentMethod=chain_deposit`. The delivery
+target is the deposit `fromAddress`; TRC20 transfers, exchange-treasury
+deposits, invalid sender addresses, non-plan amounts, and ambiguous duplicate
+plan prices remain unmatched.
 
 ## API
 

@@ -14,6 +14,8 @@ wallet automation.
 - Chain scanning is the settlement authority for wallet and manual transfers.
 - Existing rental deposits match pre-created `Payment` rows by treasury address
   and exact unique amount, including per-order sun offsets.
+- Orderless direct-pay rental deposits can create paid energy orders when a TRX
+  transfer to `TREASURY_TRON_ADDRESS` exactly equals one catalog base price.
 - Matched paid rental orders can trigger provider jobs after a deposit scan.
 - Provider execution is dry-run by default and only calls APITRX when live gates
   and secrets are configured.
@@ -23,19 +25,14 @@ wallet automation.
 - Ops console can load readiness/backlog and manually trigger scan or queue
   drains without rendering raw addresses, txids, or upstream payloads.
 
-## Next P0 Gap
+## Direct-Pay Rental Slice
 
 The user goal includes an orderless direct-pay rental path:
 
 > A user transfers a package amount to a designated address; the system watches
 > the chain, identifies the amount, and returns the corresponding energy package.
 
-The current system does not create an energy order from an unmatched deposit.
-It only settles deposits against pre-created energy orders or exchange orders.
-
-## Proposed Direct-Pay Slice
-
-Pending Claude Code approval, the smallest aligned implementation is:
+The first backend slice is implemented with these boundaries:
 
 - Only handle TRX deposits to `TREASURY_TRON_ADDRESS`.
 - Only accept amounts that exactly equal one catalog energy plan base price,
@@ -53,7 +50,10 @@ Pending Claude Code approval, the smallest aligned implementation is:
 - Do not infer energy targets for TRC20 transfers, exchange deposits, memo-less
   third-party senders, or custodial exchange withdrawals.
 
-## Required Acceptance Criteria
+There is not yet a user-facing page that advertises the direct-pay amounts or
+explains the sender-address caveat.
+
+## Acceptance Criteria
 
 - Existing pre-created order matching remains unchanged and takes precedence.
 - Duplicate scans of the same transfer do not create duplicate orders.
@@ -84,9 +84,16 @@ TEST_DATABASE_URL=postgresql://... npm run test:e2e:http-dry-run --workspace tro
 
 ## Decision Status
 
-Claude Code approval is still required before implementing the direct-pay
-matching logic because it changes how live treasury deposits can create paid
-orders. On 2026-07-01, multiple `claude -p` attempts from this workspace hung in
-the logged-in CLI path, and `claude --bare` could not use the local login state.
-No direct-pay matching code should be landed until Claude returns approval or
-required changes.
+Claude Code reviewed the direct-pay design on 2026-07-01 and required these
+changes before shipping: gate on `TREASURY_TRON_ADDRESS`, populate all required
+order fields, write `matchedOrderId`, reject ambiguous plan prices, and validate
+`fromAddress`. The implementation includes those changes.
+
+## Remaining Gaps
+
+- Add a user-facing direct-pay rental view that clearly says energy is delivered
+  to the sending address.
+- Add operator/refund handling for unmatched direct deposits and custodial
+  exchange withdrawals.
+- Run DB-backed E2E with `TEST_DATABASE_URL` before treating the direct-pay path
+  as production-ready.
