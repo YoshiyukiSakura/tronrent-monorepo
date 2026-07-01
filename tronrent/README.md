@@ -91,6 +91,29 @@ The Playwright config starts Next on port `3110`, injects the wallet mock, and
 writes browser artifacts outside the app directory at
 `../outputs/tronrent-wallet-e2e` so Next dev does not hot-reload on test output.
 
+## Operator Console
+
+`/ops` is an unlisted operator page for the existing admin-gated backend routes.
+It keeps the admin token in React state only, sends it as `x-admin-token`, and
+does not persist it to storage, cookies, or the URL.
+
+The page reads:
+
+- `GET /api/admin/readiness`
+- `GET /api/admin/automation/backlog`
+
+It can trigger:
+
+- `POST /api/deposits/scan` with an empty body, so scan-triggered provider or
+  payout processing is not enabled from the UI.
+- `POST /api/provider-jobs/process` with no `orderIds`, draining pending paid
+  energy orders through the backend gate.
+- `POST /api/exchange/payout-jobs/process` with no `exchangeOrderIds`,
+  draining pending exchange payouts through the backend gate.
+
+Action responses are reduced to counts and status fields; raw order rows,
+addresses, txids, upstream payloads, and secret-shaped fields are not rendered.
+
 ## Roadmap
 
 - [x] Initial landing page

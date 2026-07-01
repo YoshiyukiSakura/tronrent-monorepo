@@ -109,6 +109,27 @@ test("wallet pages route payments through the wallet context tronWeb seam", () =
   assert.doesNotMatch(exchangeSource, /tronWeb:\s*window\.tronWeb/);
 });
 
+test("ops page exposes proof selectors for operator smoke tests", () => {
+  const source = readSource("src/app/ops/page.tsx");
+
+  for (const key of [
+    "opsTokenInput",
+    "opsLoadStatus",
+    "opsMode",
+    "opsReadyForLive",
+    "opsWarnings",
+    "opsBacklogSummary",
+    "opsConfirmActions",
+    "opsScanDeposits",
+    "opsDrainProvider",
+    "opsDrainExchange",
+    "opsActionResult",
+    "opsError",
+  ]) {
+    assert.match(source, new RegExp(`FRONTEND_TEST_IDS\\.${key}`));
+  }
+});
+
 test("e2e wallet mock is gated and dynamically loaded from the provider", () => {
   const providerSource = readSource("src/app/providers/WalletProvider.tsx");
   const nextConfigSource = readSource("next.config.ts");

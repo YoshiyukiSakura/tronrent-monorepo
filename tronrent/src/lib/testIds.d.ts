@@ -15,4 +15,16 @@ export const FRONTEND_TEST_IDS: Readonly<{
   exchangeWalletDepositCta: string;
   exchangeWalletDepositTxid: string;
   exchangePollingError: string;
+  opsTokenInput: string;
+  opsLoadStatus: string;
+  opsMode: string;
+  opsReadyForLive: string;
+  opsWarnings: string;
+  opsBacklogSummary: string;
+  opsConfirmActions: string;
+  opsScanDeposits: string;
+  opsDrainProvider: string;
+  opsDrainExchange: string;
+  opsActionResult: string;
+  opsError: string;
 }>;

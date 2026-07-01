@@ -17,6 +17,18 @@ const FRONTEND_TEST_IDS = Object.freeze({
   exchangeWalletDepositCta: "exchange-wallet-deposit-cta",
   exchangeWalletDepositTxid: "exchange-wallet-deposit-txid",
   exchangePollingError: "exchange-polling-error",
+  opsTokenInput: "ops-token-input",
+  opsLoadStatus: "ops-load-status",
+  opsMode: "ops-mode",
+  opsReadyForLive: "ops-ready-for-live",
+  opsWarnings: "ops-warnings",
+  opsBacklogSummary: "ops-backlog-summary",
+  opsConfirmActions: "ops-confirm-actions",
+  opsScanDeposits: "ops-scan-deposits",
+  opsDrainProvider: "ops-drain-provider",
+  opsDrainExchange: "ops-drain-exchange",
+  opsActionResult: "ops-action-result",
+  opsError: "ops-error",
 });
 
 module.exports = {
