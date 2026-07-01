@@ -82,6 +82,8 @@ browser smoke tests:
 - Exchange: `exchange-create-order-cta`, `exchange-deposit-instructions`,
   `exchange-order-id`, `exchange-order-status`, `exchange-refresh-status`,
   `exchange-wallet-deposit-cta`, `exchange-wallet-deposit-txid`,
+  `exchange-payment-amount`, `exchange-payment-address`,
+  `exchange-payment-reference`, `exchange-payment-contract`,
   `exchange-polling-error`
 - Ops: `ops-token-input`, `ops-load-status`, `ops-mode`,
   `ops-ready-for-live`, `ops-warnings`, `ops-backlog-summary`,

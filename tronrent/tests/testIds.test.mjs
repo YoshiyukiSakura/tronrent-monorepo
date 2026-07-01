@@ -124,6 +124,10 @@ test("exchange page exposes proof selectors for browser smoke tests", () => {
     source,
     /testId={FRONTEND_TEST_IDS\.exchangeWalletDepositTxid}/
   );
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.exchangePaymentAmount}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.exchangePaymentAddress}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.exchangePaymentReference}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.exchangePaymentContract}/);
   assert.match(
     source,
     /<ProofPollingError[\s\S]*?testId={FRONTEND_TEST_IDS\.exchangePollingError}/
@@ -179,6 +183,7 @@ function renderProofSurface({
   orderIdTestId,
   paymentAddressTestId,
   paymentAmountTestId,
+  paymentContractTestId,
   paymentMethodDepositTestId,
   paymentMethodWalletTestId,
   paymentReferenceTestId,
@@ -226,6 +231,13 @@ function renderProofSurface({
         { testId: paymentAddressTestId },
         "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
       ),
+      paymentContractTestId
+        ? React.createElement(
+            ProofSelectorRegion,
+            { testId: paymentContractTestId },
+            "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+          )
+        : null,
       React.createElement(
         ProofSelectorRegion,
         { testId: paymentReferenceTestId },
@@ -255,6 +267,7 @@ test("proof selector components server-render rent browser-smoke hooks", () => {
     orderIdTestId: FRONTEND_TEST_IDS.rentOrderId,
     paymentAddressTestId: FRONTEND_TEST_IDS.rentPaymentAddress,
     paymentAmountTestId: FRONTEND_TEST_IDS.rentPaymentAmount,
+    paymentContractTestId: null,
     paymentMethodDepositTestId: FRONTEND_TEST_IDS.rentPaymentMethodDeposit,
     paymentMethodWalletTestId: FRONTEND_TEST_IDS.rentPaymentMethodWallet,
     paymentReferenceTestId: FRONTEND_TEST_IDS.rentPaymentReference,
@@ -289,11 +302,12 @@ test("proof selector components server-render exchange browser-smoke hooks", () 
   const html = renderProofSurface({
     instructionTestId: FRONTEND_TEST_IDS.exchangeDepositInstructions,
     orderIdTestId: FRONTEND_TEST_IDS.exchangeOrderId,
-    paymentAddressTestId: "exchange-placeholder-address",
-    paymentAmountTestId: "exchange-placeholder-amount",
+    paymentAddressTestId: FRONTEND_TEST_IDS.exchangePaymentAddress,
+    paymentAmountTestId: FRONTEND_TEST_IDS.exchangePaymentAmount,
+    paymentContractTestId: FRONTEND_TEST_IDS.exchangePaymentContract,
     paymentMethodDepositTestId: "exchange-placeholder-deposit",
     paymentMethodWalletTestId: "exchange-placeholder-wallet",
-    paymentReferenceTestId: "exchange-placeholder-reference",
+    paymentReferenceTestId: FRONTEND_TEST_IDS.exchangePaymentReference,
     pollingErrorTestId: FRONTEND_TEST_IDS.exchangePollingError,
     refreshTestId: FRONTEND_TEST_IDS.exchangeRefreshStatus,
     statusTestId: FRONTEND_TEST_IDS.exchangeOrderStatus,
@@ -308,6 +322,10 @@ test("proof selector components server-render exchange browser-smoke hooks", () 
     FRONTEND_TEST_IDS.exchangeRefreshStatus,
     FRONTEND_TEST_IDS.exchangeWalletDepositCta,
     FRONTEND_TEST_IDS.exchangeWalletDepositTxid,
+    FRONTEND_TEST_IDS.exchangePaymentAmount,
+    FRONTEND_TEST_IDS.exchangePaymentAddress,
+    FRONTEND_TEST_IDS.exchangePaymentReference,
+    FRONTEND_TEST_IDS.exchangePaymentContract,
     FRONTEND_TEST_IDS.exchangePollingError,
   ]) {
     assert.match(html, new RegExp(`data-testid="${testId}"`));

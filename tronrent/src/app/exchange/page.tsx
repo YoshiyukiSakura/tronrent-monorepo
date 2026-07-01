@@ -726,38 +726,53 @@ export default function ExchangePage() {
                       onCopy={() => copyText("order", createdOrder.id)}
                     />
                   </ProofSelectorRegion>
-                  <InstructionRow
-                    label="精确打款金额"
-                    value={createdOrder.depositInstructions.amountDisplay}
-                    copied={copiedField === "amount"}
-                    tone="emphasis"
-                    onCopy={() =>
-                      copyText(
-                        "amount",
-                        createdOrder.depositInstructions.amountDisplay
-                      )
-                    }
-                  />
-                  <InstructionRow
-                    label="收款地址"
-                    value={createdOrder.depositInstructions.address}
-                    copied={copiedField === "address"}
-                    onCopy={() =>
-                      copyText("address", createdOrder.depositInstructions.address)
-                    }
-                  />
-                  {createdOrder.depositInstructions.contractAddress && (
+                  <ProofSelectorRegion
+                    testId={FRONTEND_TEST_IDS.exchangePaymentAmount}
+                  >
                     <InstructionRow
-                      label="TRC20 合约"
-                      value={createdOrder.depositInstructions.contractAddress}
-                      copied={copiedField === "contract"}
+                      label="精确打款金额"
+                      value={createdOrder.depositInstructions.amountDisplay}
+                      copied={copiedField === "amount"}
+                      tone="emphasis"
                       onCopy={() =>
                         copyText(
-                          "contract",
-                          createdOrder.depositInstructions.contractAddress
+                          "amount",
+                          createdOrder.depositInstructions.amountDisplay
                         )
                       }
                     />
+                  </ProofSelectorRegion>
+                  <ProofSelectorRegion
+                    testId={FRONTEND_TEST_IDS.exchangePaymentAddress}
+                  >
+                    <InstructionRow
+                      label="收款地址"
+                      value={createdOrder.depositInstructions.address}
+                      copied={copiedField === "address"}
+                      onCopy={() =>
+                        copyText(
+                          "address",
+                          createdOrder.depositInstructions.address
+                        )
+                      }
+                    />
+                  </ProofSelectorRegion>
+                  {createdOrder.depositInstructions.contractAddress && (
+                    <ProofSelectorRegion
+                      testId={FRONTEND_TEST_IDS.exchangePaymentContract}
+                    >
+                      <InstructionRow
+                        label="TRC20 合约"
+                        value={createdOrder.depositInstructions.contractAddress}
+                        copied={copiedField === "contract"}
+                        onCopy={() =>
+                          copyText(
+                            "contract",
+                            createdOrder.depositInstructions.contractAddress
+                          )
+                        }
+                      />
+                    </ProofSelectorRegion>
                   )}
                   <InstructionRow
                     label="预计收到"
@@ -767,14 +782,18 @@ export default function ExchangePage() {
                       copyText("output", createdOrder.outputAmountDisplay)
                     }
                   />
-                  <InstructionRow
-                    label="付款备注"
-                    value={createdOrder.depositReference}
-                    copied={copiedField === "reference"}
-                    onCopy={() =>
-                      copyText("reference", createdOrder.depositReference)
-                    }
-                  />
+                  <ProofSelectorRegion
+                    testId={FRONTEND_TEST_IDS.exchangePaymentReference}
+                  >
+                    <InstructionRow
+                      label="付款备注"
+                      value={createdOrder.depositReference}
+                      copied={copiedField === "reference"}
+                      onCopy={() =>
+                        copyText("reference", createdOrder.depositReference)
+                      }
+                    />
+                  </ProofSelectorRegion>
                   <InstructionRow
                     label="付款有效期"
                     value={formatSeconds(orderSecondsRemaining)}

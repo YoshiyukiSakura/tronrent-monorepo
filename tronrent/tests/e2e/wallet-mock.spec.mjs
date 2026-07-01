@@ -317,6 +317,85 @@ test("rent deposit-address payment shows exact instructions without wallet broad
   expect(transactions).toEqual([]);
 });
 
+test("exchange manual TRX deposit shows exact instructions without wallet broadcast", async ({
+  page,
+}) => {
+  await page.goto("/exchange");
+  await waitForMockWallet(page);
+  await page.getByRole("button", { name: "获取报价" }).click();
+  await page.getByTestId(FRONTEND_TEST_IDS.exchangeCreateOrderCta).click();
+
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeDepositInstructions)
+  ).toBeVisible();
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeOrderStatus)
+  ).toContainText("等待入金");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentAmount).locator("span").first()
+  ).toHaveText("100 TRX");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentAddress)
+  ).toContainText(E2E_TREASURY_ADDRESS);
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentReference)
+  ).toContainText("exchange-order-trx_to_usdt");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentContract)
+  ).toHaveCount(0);
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeWalletDepositCta)
+  ).toBeVisible();
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeWalletDepositTxid)
+  ).toHaveCount(0);
+
+  const transactions = await page.evaluate(
+    () => window.__TRONRENT_E2E_WALLET_MOCK__.transactions
+  );
+  expect(transactions).toEqual([]);
+});
+
+test("exchange manual USDT deposit shows contract instructions without wallet broadcast", async ({
+  page,
+}) => {
+  await page.goto("/exchange");
+  await waitForMockWallet(page);
+  await page.getByRole("button", { name: "USDT -> TRX" }).click();
+  await page.getByRole("button", { name: "获取报价" }).click();
+  await page.getByTestId(FRONTEND_TEST_IDS.exchangeCreateOrderCta).click();
+
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeDepositInstructions)
+  ).toBeVisible();
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeOrderStatus)
+  ).toContainText("等待入金");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentAmount).locator("span").first()
+  ).toHaveText("100 USDT");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentAddress)
+  ).toContainText(E2E_TREASURY_ADDRESS);
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentReference)
+  ).toContainText("exchange-order-usdt_to_trx");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangePaymentContract)
+  ).toContainText(E2E_USDT_CONTRACT_ADDRESS);
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeWalletDepositCta)
+  ).toBeVisible();
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.exchangeWalletDepositTxid)
+  ).toHaveCount(0);
+
+  const transactions = await page.evaluate(
+    () => window.__TRONRENT_E2E_WALLET_MOCK__.transactions
+  );
+  expect(transactions).toEqual([]);
+});
+
 test("exchange wallet deposit broadcasts TRX and remains pending backend scan", async ({
   page,
 }) => {

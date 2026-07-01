@@ -19,6 +19,10 @@ export const FRONTEND_TEST_IDS: Readonly<{
   exchangeRefreshStatus: string;
   exchangeWalletDepositCta: string;
   exchangeWalletDepositTxid: string;
+  exchangePaymentAmount: string;
+  exchangePaymentAddress: string;
+  exchangePaymentReference: string;
+  exchangePaymentContract: string;
   exchangePollingError: string;
   opsTokenInput: string;
   opsLoadStatus: string;
