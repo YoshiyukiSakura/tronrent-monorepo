@@ -6,6 +6,11 @@ export const FRONTEND_TEST_IDS: Readonly<{
   rentRefreshStatus: string;
   rentWalletPaymentCta: string;
   rentWalletPaymentTxid: string;
+  rentPaymentMethodWallet: string;
+  rentPaymentMethodDeposit: string;
+  rentPaymentAmount: string;
+  rentPaymentAddress: string;
+  rentPaymentReference: string;
   rentPollingError: string;
   exchangeCreateOrderCta: string;
   exchangeDepositInstructions: string;

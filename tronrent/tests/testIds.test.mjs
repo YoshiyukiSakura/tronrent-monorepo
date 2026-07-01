@@ -35,6 +35,14 @@ test("rent page exposes proof selectors for browser smoke tests", () => {
   assert.match(source, /data-testid={FRONTEND_TEST_IDS\.rentCreateOrderCta}/);
   assert.match(
     source,
+    /data-testid={FRONTEND_TEST_IDS\.rentPaymentMethodWallet}/
+  );
+  assert.match(
+    source,
+    /data-testid={FRONTEND_TEST_IDS\.rentPaymentMethodDeposit}/
+  );
+  assert.match(
+    source,
     /<ProofSelectorRegion[\s\S]*?testId={FRONTEND_TEST_IDS\.rentPaymentInstructions}/
   );
   assert.match(
@@ -57,6 +65,9 @@ test("rent page exposes proof selectors for browser smoke tests", () => {
     source,
     /testId={FRONTEND_TEST_IDS\.rentWalletPaymentTxid}/
   );
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentAmount}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentAddress}/);
+  assert.match(source, /testId={FRONTEND_TEST_IDS\.rentPaymentReference}/);
   assert.match(
     source,
     /<ProofPollingError[\s\S]*?testId={FRONTEND_TEST_IDS\.rentPollingError}/
@@ -146,6 +157,11 @@ test("e2e wallet mock is gated and dynamically loaded from the provider", () => 
 function renderProofSurface({
   instructionTestId,
   orderIdTestId,
+  paymentAddressTestId,
+  paymentAmountTestId,
+  paymentMethodDepositTestId,
+  paymentMethodWalletTestId,
+  paymentReferenceTestId,
   pollingErrorTestId,
   refreshTestId,
   statusTestId,
@@ -156,6 +172,16 @@ function renderProofSurface({
     React.createElement(
       ProofSelectorRegion,
       { testId: instructionTestId },
+      React.createElement(
+        "button",
+        { "data-testid": paymentMethodWalletTestId },
+        "钱包付款"
+      ),
+      React.createElement(
+        "button",
+        { "data-testid": paymentMethodDepositTestId },
+        "地址转账"
+      ),
       React.createElement(
         ProofSelectorRegion,
         { testId: statusTestId },
@@ -169,6 +195,21 @@ function renderProofSurface({
         ProofSelectorRegion,
         { testId: orderIdTestId },
         "order-123"
+      ),
+      React.createElement(
+        ProofSelectorRegion,
+        { testId: paymentAmountTestId },
+        "2.340001 TRX"
+      ),
+      React.createElement(
+        ProofSelectorRegion,
+        { testId: paymentAddressTestId },
+        "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+      ),
+      React.createElement(
+        ProofSelectorRegion,
+        { testId: paymentReferenceTestId },
+        "TR-123"
       ),
       React.createElement(
         "button",
@@ -192,6 +233,11 @@ test("proof selector components server-render rent browser-smoke hooks", () => {
   const html = renderProofSurface({
     instructionTestId: FRONTEND_TEST_IDS.rentPaymentInstructions,
     orderIdTestId: FRONTEND_TEST_IDS.rentOrderId,
+    paymentAddressTestId: FRONTEND_TEST_IDS.rentPaymentAddress,
+    paymentAmountTestId: FRONTEND_TEST_IDS.rentPaymentAmount,
+    paymentMethodDepositTestId: FRONTEND_TEST_IDS.rentPaymentMethodDeposit,
+    paymentMethodWalletTestId: FRONTEND_TEST_IDS.rentPaymentMethodWallet,
+    paymentReferenceTestId: FRONTEND_TEST_IDS.rentPaymentReference,
     pollingErrorTestId: FRONTEND_TEST_IDS.rentPollingError,
     refreshTestId: FRONTEND_TEST_IDS.rentRefreshStatus,
     statusTestId: FRONTEND_TEST_IDS.rentOrderStatus,
@@ -206,6 +252,11 @@ test("proof selector components server-render rent browser-smoke hooks", () => {
     FRONTEND_TEST_IDS.rentRefreshStatus,
     FRONTEND_TEST_IDS.rentWalletPaymentCta,
     FRONTEND_TEST_IDS.rentWalletPaymentTxid,
+    FRONTEND_TEST_IDS.rentPaymentMethodWallet,
+    FRONTEND_TEST_IDS.rentPaymentMethodDeposit,
+    FRONTEND_TEST_IDS.rentPaymentAmount,
+    FRONTEND_TEST_IDS.rentPaymentAddress,
+    FRONTEND_TEST_IDS.rentPaymentReference,
     FRONTEND_TEST_IDS.rentPollingError,
   ]) {
     assert.match(html, new RegExp(`data-testid="${testId}"`));
@@ -218,6 +269,11 @@ test("proof selector components server-render exchange browser-smoke hooks", () 
   const html = renderProofSurface({
     instructionTestId: FRONTEND_TEST_IDS.exchangeDepositInstructions,
     orderIdTestId: FRONTEND_TEST_IDS.exchangeOrderId,
+    paymentAddressTestId: "exchange-placeholder-address",
+    paymentAmountTestId: "exchange-placeholder-amount",
+    paymentMethodDepositTestId: "exchange-placeholder-deposit",
+    paymentMethodWalletTestId: "exchange-placeholder-wallet",
+    paymentReferenceTestId: "exchange-placeholder-reference",
     pollingErrorTestId: FRONTEND_TEST_IDS.exchangePollingError,
     refreshTestId: FRONTEND_TEST_IDS.exchangeRefreshStatus,
     statusTestId: FRONTEND_TEST_IDS.exchangeOrderStatus,

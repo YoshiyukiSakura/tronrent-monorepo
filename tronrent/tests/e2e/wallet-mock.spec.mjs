@@ -35,14 +35,19 @@ async function fulfillJson(route, data, status = 200) {
   });
 }
 
-function makeEnergyOrder() {
+function makeEnergyOrder(paymentMethod = "wallet_connect") {
+  const isDepositAddress = paymentMethod === "deposit_address";
   return {
-    id: "energy-order-wallet-e2e",
-    idempotencyKey: "energy-idempotency-e2e",
+    id: isDepositAddress
+      ? "energy-order-deposit-e2e"
+      : "energy-order-wallet-e2e",
+    idempotencyKey: isDepositAddress
+      ? "energy-idempotency-deposit-e2e"
+      : "energy-idempotency-e2e",
     planId: "starter",
     targetAddress: E2E_WALLET_ADDRESS,
     customerWalletAddress: E2E_WALLET_ADDRESS,
-    paymentMethod: "wallet_connect",
+    paymentMethod,
     status: "pending_payment",
     priceAmountSun: "2340001",
     basePriceAmountSun: "2340000",
@@ -50,7 +55,9 @@ function makeEnergyOrder() {
     priceDisplay: "2.340001 TRX",
     energyAmount: 65000,
     durationHours: 1,
-    paymentReference: "energy-order-wallet-e2e",
+    paymentReference: isDepositAddress
+      ? "energy-order-deposit-e2e"
+      : "energy-order-wallet-e2e",
     expiresAt: futureIso(),
     paidAt: null,
     fulfilledAt: null,
@@ -58,17 +65,23 @@ function makeEnergyOrder() {
     providerJobs: [],
     treasuryAddress: E2E_TREASURY_ADDRESS,
     paymentInstructions: {
-      method: "wallet_connect",
+      method: paymentMethod,
       asset: "TRX",
       amountSun: "2340001",
       amountDisplay: "2.340001 TRX",
       address: E2E_TREASURY_ADDRESS,
-      paymentReference: "energy-order-wallet-e2e",
+      paymentReference: isDepositAddress
+        ? "energy-order-deposit-e2e"
+        : "energy-order-wallet-e2e",
       executionMode: {
         providerLive: false,
       },
       configured: true,
-      warnings: ["E2E 假后端不会把钱包广播自动标记为已付款。"],
+      warnings: [
+        isDepositAddress
+          ? "E2E 假后端不会把地址转账自动标记为已付款。"
+          : "E2E 假后端不会把钱包广播自动标记为已付款。",
+      ],
     },
   };
 }
@@ -142,6 +155,7 @@ function makeExchangeOrder(direction) {
 }
 
 async function installApiRoutes(page) {
+  let lastEnergyPaymentMethod = "wallet_connect";
   let lastExchangeDirection = "TRX_TO_USDT";
 
   await page.route(API_BASE_URL_PATTERN, async (route) => {
@@ -176,12 +190,22 @@ async function installApiRoutes(page) {
     }
 
     if (path === "/api/orders" && request.method() === "POST") {
-      await fulfillJson(route, envelope(makeEnergyOrder()));
+      const body = JSON.parse(request.postData() || "{}");
+      lastEnergyPaymentMethod = body.paymentMethod || "wallet_connect";
+      await fulfillJson(route, envelope(makeEnergyOrder(lastEnergyPaymentMethod)));
       return;
     }
 
     if (path === "/api/orders/energy-order-wallet-e2e") {
-      await fulfillJson(route, envelope(makeEnergyOrder()));
+      await fulfillJson(route, envelope(makeEnergyOrder("wallet_connect")));
+      return;
+    }
+
+    if (path === "/api/orders/energy-order-deposit-e2e") {
+      await fulfillJson(
+        route,
+        envelope(makeEnergyOrder("deposit_address"))
+      );
       return;
     }
 
@@ -254,6 +278,43 @@ test("rent wallet payment broadcasts through dev wallet mock without settling or
       amountSun: 2340001,
     },
   ]);
+});
+
+test("rent deposit-address payment shows exact instructions without wallet broadcast", async ({
+  page,
+}) => {
+  await page.goto("/rent");
+  await waitForMockWallet(page);
+  await page.locator('input[placeholder="T..."]').fill(E2E_WALLET_ADDRESS);
+  await page.getByTestId(FRONTEND_TEST_IDS.rentPaymentMethodDeposit).click();
+  await page.getByTestId(FRONTEND_TEST_IDS.rentCreateOrderCta).click();
+
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.rentPaymentInstructions)
+  ).toBeVisible();
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentOrderStatus)).toContainText(
+    "等待付款"
+  );
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.rentPaymentAmount).locator("span").first()
+  ).toHaveText("2.340001 TRX");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.rentPaymentAddress)
+  ).toContainText(E2E_TREASURY_ADDRESS);
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.rentPaymentReference)
+  ).toContainText("energy-order-deposit-e2e");
+  await expect(page.getByTestId(FRONTEND_TEST_IDS.rentWalletPaymentCta)).toHaveCount(
+    0
+  );
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.rentWalletPaymentTxid)
+  ).toHaveCount(0);
+
+  const transactions = await page.evaluate(
+    () => window.__TRONRENT_E2E_WALLET_MOCK__.transactions
+  );
+  expect(transactions).toEqual([]);
 });
 
 test("exchange wallet deposit broadcasts TRX and remains pending backend scan", async ({

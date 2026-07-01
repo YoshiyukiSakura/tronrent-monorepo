@@ -476,6 +476,7 @@ export default function RentPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("wallet_connect")}
+                    data-testid={FRONTEND_TEST_IDS.rentPaymentMethodWallet}
                     className={`rounded-md border px-3 py-3 text-sm ${
                       paymentMethod === "wallet_connect"
                         ? "border-[#f05e23] bg-[#2a1b19]"
@@ -488,6 +489,7 @@ export default function RentPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("deposit_address")}
+                    data-testid={FRONTEND_TEST_IDS.rentPaymentMethodDeposit}
                     className={`rounded-md border px-3 py-3 text-sm ${
                       paymentMethod === "deposit_address"
                         ? "border-[#f05e23] bg-[#2a1b19]"
@@ -594,36 +596,44 @@ export default function RentPage() {
                       onCopy={() => copyText("order", createdOrder.id)}
                     />
                   </ProofSelectorRegion>
-                  <InstructionRow
-                    label="金额"
-                    value={createdOrder.paymentInstructions.amountDisplay}
-                    copied={copiedField === "amount"}
-                    onCopy={() =>
-                      copyText(
-                        "amount",
-                        createdOrder.paymentInstructions.amountDisplay
-                      )
-                    }
-                  />
-                  <InstructionRow
-                    label="收款地址"
-                    value={createdOrder.paymentInstructions.address || "未配置"}
-                    copied={copiedField === "address"}
-                    onCopy={() =>
-                      copyText(
-                        "address",
-                        createdOrder.paymentInstructions.address
-                      )
-                    }
-                  />
-                  <InstructionRow
-                    label="付款备注"
-                    value={createdOrder.paymentReference}
-                    copied={copiedField === "reference"}
-                    onCopy={() =>
-                      copyText("reference", createdOrder.paymentReference)
-                    }
-                  />
+                  <ProofSelectorRegion testId={FRONTEND_TEST_IDS.rentPaymentAmount}>
+                    <InstructionRow
+                      label="金额"
+                      value={createdOrder.paymentInstructions.amountDisplay}
+                      copied={copiedField === "amount"}
+                      onCopy={() =>
+                        copyText(
+                          "amount",
+                          createdOrder.paymentInstructions.amountDisplay
+                        )
+                      }
+                    />
+                  </ProofSelectorRegion>
+                  <ProofSelectorRegion testId={FRONTEND_TEST_IDS.rentPaymentAddress}>
+                    <InstructionRow
+                      label="收款地址"
+                      value={createdOrder.paymentInstructions.address || "未配置"}
+                      copied={copiedField === "address"}
+                      onCopy={() =>
+                        copyText(
+                          "address",
+                          createdOrder.paymentInstructions.address
+                        )
+                      }
+                    />
+                  </ProofSelectorRegion>
+                  <ProofSelectorRegion
+                    testId={FRONTEND_TEST_IDS.rentPaymentReference}
+                  >
+                    <InstructionRow
+                      label="付款备注"
+                      value={createdOrder.paymentReference}
+                      copied={copiedField === "reference"}
+                      onCopy={() =>
+                        copyText("reference", createdOrder.paymentReference)
+                      }
+                    />
+                  </ProofSelectorRegion>
                   {latestPayment?.status && (
                     <InstructionRow label="付款状态" value={latestPayment.status} />
                   )}
