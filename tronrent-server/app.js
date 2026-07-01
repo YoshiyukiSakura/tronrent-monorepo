@@ -12,6 +12,7 @@ const providerJobRoutes = require("./routes/providerJobRoutes");
 const queueRoutes = require("./routes/queueRoutes");
 const depositWatcherService = require("./services/depositWatcherService");
 const exchangeOrderService = require("./services/exchangeOrderService");
+const exchangePayoutJobService = require("./services/exchangePayoutJobService");
 const orderService = require("./services/orderService");
 const providerJobService = require("./services/providerJobService");
 const queueService = require("./services/queueService");
@@ -123,6 +124,21 @@ sequelize
           );
         } catch (error) {
           console.error("Error in scheduled deposit scan:", error);
+        }
+      });
+    }
+
+    if (process.env.ENABLE_EXCHANGE_PAYOUT_CRON === "true") {
+      cron.schedule("* * * * *", async () => {
+        console.log("Running scheduled exchange payout processing...");
+        try {
+          const processedJobs =
+            await exchangePayoutJobService.processPendingExchangePayouts();
+          console.log(
+            `Processed ${processedJobs.length} exchange payout jobs`
+          );
+        } catch (error) {
+          console.error("Error in scheduled exchange payout processing:", error);
         }
       });
     }

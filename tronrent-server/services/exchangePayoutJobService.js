@@ -29,6 +29,14 @@ function getReviewLimit(rawLimit) {
   return Math.min(parsed, 200);
 }
 
+function getPendingPayoutLimit(rawLimit) {
+  const parsed = Number.parseInt(rawLimit || "10", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 10;
+  }
+  return Math.min(parsed, 200);
+}
+
 function getStaleProcessingMinutes(rawMinutes) {
   const parsed = Number.parseInt(rawMinutes || "10", 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -538,11 +546,27 @@ async function processExchangeOrders(exchangeOrderIds = []) {
   return results;
 }
 
+async function processPendingExchangePayouts({ limit = 10 } = {}) {
+  const clampedLimit = getPendingPayoutLimit(limit);
+  const orders = await ExchangeOrder.findAll({
+    where: { status: EXCHANGE_ORDER_STATUSES.FUNDS_RECEIVED },
+    order: [
+      ["fundsReceivedAt", "ASC"],
+      ["id", "ASC"],
+    ],
+    limit: clampedLimit,
+  });
+
+  const exchangeOrderIds = orders.map((order) => order.id).filter(Boolean);
+  return processExchangeOrders(exchangeOrderIds);
+}
+
 module.exports = {
   assertExchangePayoutRouteEnabled,
   listPayoutReviewItems,
   processExchangeOrder,
   processExchangeOrders,
+  processPendingExchangePayouts,
   resolvePayoutReview,
   serializePayoutReviewItem,
 };

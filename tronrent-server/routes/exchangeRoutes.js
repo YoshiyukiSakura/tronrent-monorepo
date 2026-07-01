@@ -4,7 +4,7 @@ const express = require("express");
 const exchangeOrderService = require("../services/exchangeOrderService");
 const exchangePayoutJobService = require("../services/exchangePayoutJobService");
 const exchangeQuoteService = require("../services/exchangeQuoteService");
-const { sendHttpError } = require("../utils/httpErrors");
+const { createHttpError, sendHttpError } = require("../utils/httpErrors");
 const { readAdminActor } = require("../utils/manualResolution");
 
 const router = express.Router();
@@ -65,9 +65,26 @@ router.get("/payout-jobs/review", async (req, res) => {
 router.post("/payout-jobs/process", async (req, res) => {
   try {
     exchangePayoutJobService.assertExchangePayoutRouteEnabled(req);
-    const results = await exchangePayoutJobService.processExchangeOrders(
-      req.body.exchangeOrderIds || []
+    const body = req.body || {};
+    const hasExchangeOrderIds = Object.prototype.hasOwnProperty.call(
+      body,
+      "exchangeOrderIds"
     );
+    let results;
+    if (hasExchangeOrderIds) {
+      if (!Array.isArray(body.exchangeOrderIds)) {
+        throw createHttpError(400, "exchangeOrderIds must be an array");
+      }
+      results = await exchangePayoutJobService.processExchangeOrders(
+        body.exchangeOrderIds
+      );
+    } else {
+      const limit = Number.parseInt(body.limit || "10", 10);
+      results = await exchangePayoutJobService.processPendingExchangePayouts({
+        limit: Number.isFinite(limit) ? limit : 10,
+      });
+    }
+
     res.status(200).json({
       success: true,
       count: results.length,

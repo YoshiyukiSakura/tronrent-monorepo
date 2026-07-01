@@ -35,6 +35,8 @@ function makeWarning(code, message, severity = "warning") {
 
 function buildWarnings(report) {
   const warnings = [];
+  const depositTriggeredExchangePayoutsEnabled =
+    report.depositScan.cronEnabled && report.depositScan.processExchangePayouts;
 
   if (!report.admin.adminTokenConfigured) {
     warnings.push(
@@ -139,6 +141,7 @@ function buildWarnings(report) {
 
   if (
     (report.depositScan.processExchangePayouts ||
+      report.exchangePayout.cronEnabled ||
       report.exchangePayout.endpointEnabled) &&
     !report.exchangePayout.live
   ) {
@@ -226,14 +229,32 @@ function buildWarnings(report) {
   if (
     report.exchangePayout.live &&
     !(
-      report.depositScan.cronEnabled &&
-      report.depositScan.processExchangePayouts
+      depositTriggeredExchangePayoutsEnabled ||
+      report.exchangePayout.cronEnabled
     )
   ) {
     warnings.push(
       makeWarning(
         "EXCHANGE_PAYOUT_LIVE_WITHOUT_AUTOMATION",
-        "EXCHANGE_PAYOUT_LIVE=true but deposit-triggered payout automation is not enabled."
+        "EXCHANGE_PAYOUT_LIVE=true but no exchange payout automation path is enabled."
+      )
+    );
+  }
+
+  if (report.exchangePayout.live && !depositTriggeredExchangePayoutsEnabled) {
+    warnings.push(
+      makeWarning(
+        "EXCHANGE_PAYOUT_LIVE_WITHOUT_DEPOSIT_TRIGGER",
+        "EXCHANGE_PAYOUT_LIVE=true but deposit-triggered exchange payout processing is not enabled."
+      )
+    );
+  }
+
+  if (report.exchangePayout.live && !report.exchangePayout.cronEnabled) {
+    warnings.push(
+      makeWarning(
+        "EXCHANGE_PAYOUT_LIVE_WITHOUT_PENDING_DRAIN",
+        "EXCHANGE_PAYOUT_LIVE=true but ENABLE_EXCHANGE_PAYOUT_CRON=false; existing funds_received exchange orders will not be drained automatically."
       )
     );
   }
@@ -259,7 +280,8 @@ function deriveMode(report, warnings) {
     report.exchangePayout.live ||
     report.depositScan.processProviderJobs ||
     report.depositScan.processExchangePayouts ||
-    report.provider.cronEnabled;
+    report.provider.cronEnabled ||
+    report.exchangePayout.cronEnabled;
 
   if (!hasLiveGate) {
     return "dry-run";
@@ -277,6 +299,7 @@ function deriveMode(report, warnings) {
     report.exchangePayout.live &&
     report.exchangePayout.readyForLive &&
     report.exchangePayout.endpointEnabled &&
+    report.exchangePayout.cronEnabled &&
     report.orderExpiry.cronEnabled &&
     report.exchangeExpiry.cronEnabled;
 
@@ -341,6 +364,7 @@ function buildReadinessReport({ env = process.env, now = new Date() } = {}) {
       privateKeyConfigured: isPresent(env, "EXCHANGE_PAYOUT_PRIVATE_KEY"),
       fromAddressConfigured: isPresent(env, "EXCHANGE_PAYOUT_FROM_ADDRESS"),
       endpointEnabled: isEnabled(env, "ENABLE_EXCHANGE_PAYOUT_ENDPOINT"),
+      cronEnabled: isEnabled(env, "ENABLE_EXCHANGE_PAYOUT_CRON"),
       readyForLive:
         isEnabled(env, "EXCHANGE_PAYOUT_LIVE") &&
         isPresent(env, "EXCHANGE_PAYOUT_PRIVATE_KEY") &&

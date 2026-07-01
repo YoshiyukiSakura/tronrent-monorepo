@@ -53,6 +53,7 @@ APITRX_TIMEOUT_MS=15000
 ENABLE_QUEUE_CRON=false
 ENABLE_ORDER_PROVIDER_CRON=false
 ENABLE_DEPOSIT_WATCHER_CRON=false
+ENABLE_EXCHANGE_PAYOUT_CRON=false
 ENABLE_ORDER_EXPIRY_CRON=false
 ENABLE_EXCHANGE_EXPIRY_CRON=false
 ENABLE_DEPOSIT_SCAN_ENDPOINT=false
@@ -293,6 +294,13 @@ manually before any reattempt.
 The exchange payout review/process endpoints are privileged in every
 environment. Set `ENABLE_EXCHANGE_PAYOUT_ENDPOINT=true`, set
 `DEPOSIT_WATCHER_ADMIN_TOKEN`, and send the token as `x-admin-token`.
+`POST /api/exchange/payout-jobs/process` keeps explicit-ID processing when
+`exchangeOrderIds` is present, including an explicit empty array no-op. When no
+IDs are supplied, it drains pending
+`funds_received` exchange orders by `limit` (default 10). The scheduled version
+is separately gated by `ENABLE_EXCHANGE_PAYOUT_CRON=true` and is off by default.
+The readiness report marks full live exchange payout automation only when both
+deposit-triggered payout processing and this pending-drain cron are enabled.
 
 After operator reconciliation, `POST /api/exchange/payout-jobs/:exchangeOrderId/resolve`
 can close a `payout_indeterminate` order as `completed` or `failed`. This is a

@@ -1,8 +1,11 @@
 "use strict";
 
+const http = require("node:http");
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const express = require("express");
 const db = require("../db/models");
+const exchangeRoutes = require("../routes/exchangeRoutes");
 const payoutClient = require("../services/exchangePayoutClient");
 const payoutJobService = require("../services/exchangePayoutJobService");
 const {
@@ -18,6 +21,8 @@ const ORIGINALS = {
   payoutJobCreate: db.ExchangePayoutJob.create,
   payoutJobFindByPk: db.ExchangePayoutJob.findByPk,
   payoutJobFindOne: db.ExchangePayoutJob.findOne,
+  processExchangeOrders: payoutJobService.processExchangeOrders,
+  processPendingExchangePayouts: payoutJobService.processPendingExchangePayouts,
   transaction: db.sequelize.transaction,
 };
 
@@ -30,7 +35,59 @@ function restoreState() {
   db.ExchangePayoutJob.create = ORIGINALS.payoutJobCreate;
   db.ExchangePayoutJob.findByPk = ORIGINALS.payoutJobFindByPk;
   db.ExchangePayoutJob.findOne = ORIGINALS.payoutJobFindOne;
+  payoutJobService.processExchangeOrders = ORIGINALS.processExchangeOrders;
+  payoutJobService.processPendingExchangePayouts =
+    ORIGINALS.processPendingExchangePayouts;
   db.sequelize.transaction = ORIGINALS.transaction;
+}
+
+function requestJson(app, { method, path, body, headers = {} }) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(app);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      const payload = body === undefined ? "" : JSON.stringify(body);
+      const req = http.request(
+        {
+          hostname: "127.0.0.1",
+          port,
+          method,
+          path,
+          headers: {
+            "content-type": "application/json",
+            "content-length": Buffer.byteLength(payload),
+            ...headers,
+          },
+        },
+        (res) => {
+          let responseBody = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            responseBody += chunk;
+          });
+          res.on("end", () => {
+            server.close(() => {
+              resolve({
+                statusCode: res.statusCode,
+                body: responseBody ? JSON.parse(responseBody) : null,
+              });
+            });
+          });
+        }
+      );
+      req.on("error", (error) => {
+        server.close(() => reject(error));
+      });
+      req.end(payload);
+    });
+  });
+}
+
+function makeExchangeRouteApp() {
+  const app = express();
+  app.use(express.json());
+  app.use("/api/exchange", exchangeRoutes);
+  return app;
 }
 
 function buildMutableExchangeOrder(overrides = {}) {
@@ -392,6 +449,142 @@ test("payout review uses inclusive stale threshold", async () => {
 
   assert.equal(result.count, 1);
   assert.equal(result.data[0].exchangeOrder.id, "threshold-processing");
+});
+
+test("pending exchange payouts drain funds-received orders by limit and continue after skips", async () => {
+  let findAllOptions;
+  const successfulOrder = buildMutableExchangeOrder({
+    id: "exchange-order-success",
+    fundsReceivedAt: new Date("2026-07-01T00:02:00.000Z"),
+  });
+  const job = buildMutablePayoutJob({ id: "payout-job-success" });
+  let sendCalled = 0;
+
+  db.ExchangeOrder.findAll = async (options) => {
+    findAllOptions = options;
+    return [
+      { id: "exchange-order-skip" },
+      { id: successfulOrder.id },
+    ];
+  };
+  db.sequelize.transaction = async (callback) => callback({ testTransaction: true });
+  db.ExchangeOrder.findByPk = async (id) => {
+    if (id === "exchange-order-skip") {
+      return null;
+    }
+    return successfulOrder;
+  };
+  db.ExchangePayoutJob.findOne = async () => null;
+  db.ExchangePayoutJob.create = async (payload) => {
+    Object.assign(job, payload);
+    return job;
+  };
+  db.ExchangePayoutJob.findByPk = async () => job;
+  db.ChainDeposit.update = async () => {};
+  payoutClient.setPayoutAdapterForTesting({
+    sendTrx: async () => {
+      sendCalled += 1;
+      return { txid: "dry-run-success" };
+    },
+  });
+
+  const results = await payoutJobService.processPendingExchangePayouts({
+    limit: 999,
+  });
+
+  assert.deepEqual(findAllOptions.where, {
+    status: EXCHANGE_ORDER_STATUSES.FUNDS_RECEIVED,
+  });
+  assert.deepEqual(findAllOptions.order, [
+    ["fundsReceivedAt", "ASC"],
+    ["id", "ASC"],
+  ]);
+  assert.equal(findAllOptions.limit, 200);
+  assert.equal(results.length, 2);
+  assert.deepEqual(
+    results.map((result) => ({
+      exchangeOrderId: result.exchangeOrderId,
+      success: result.success,
+      skipped: Boolean(result.skipped),
+    })),
+    [
+      {
+        exchangeOrderId: "exchange-order-skip",
+        success: false,
+        skipped: true,
+      },
+      {
+        exchangeOrderId: successfulOrder.id,
+        success: true,
+        skipped: false,
+      },
+    ]
+  );
+  assert.equal(job.dryRun, true);
+  assert.equal(sendCalled, 0);
+  assert.equal(successfulOrder.status, EXCHANGE_ORDER_STATUSES.PAYOUT_COMPLETED);
+});
+
+test("exchange payout process endpoint drains pending orders when ids are absent", async () => {
+  process.env.ENABLE_EXCHANGE_PAYOUT_ENDPOINT = "true";
+  process.env.DEPOSIT_WATCHER_ADMIN_TOKEN = "secret-admin-token";
+  let pendingLimit;
+  let explicitCalled = false;
+
+  payoutJobService.processExchangeOrders = async () => {
+    explicitCalled = true;
+    return [];
+  };
+  payoutJobService.processPendingExchangePayouts = async ({ limit }) => {
+    pendingLimit = limit;
+    return [
+      {
+        exchangeOrderId: "exchange-order-pending",
+        success: true,
+      },
+    ];
+  };
+
+  const response = await requestJson(makeExchangeRouteApp(), {
+    method: "POST",
+    path: "/api/exchange/payout-jobs/process",
+    headers: { "x-admin-token": "secret-admin-token" },
+    body: { limit: 3 },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(pendingLimit, 3);
+  assert.equal(explicitCalled, false);
+  assert.equal(response.body.count, 1);
+  assert.equal(response.body.data[0].exchangeOrderId, "exchange-order-pending");
+});
+
+test("exchange payout process endpoint treats explicit empty ids as no-op", async () => {
+  process.env.ENABLE_EXCHANGE_PAYOUT_ENDPOINT = "true";
+  process.env.DEPOSIT_WATCHER_ADMIN_TOKEN = "secret-admin-token";
+  let explicitIds;
+  let pendingCalled = false;
+
+  payoutJobService.processExchangeOrders = async (exchangeOrderIds) => {
+    explicitIds = exchangeOrderIds;
+    return [];
+  };
+  payoutJobService.processPendingExchangePayouts = async () => {
+    pendingCalled = true;
+    return [];
+  };
+
+  const response = await requestJson(makeExchangeRouteApp(), {
+    method: "POST",
+    path: "/api/exchange/payout-jobs/process",
+    headers: { "x-admin-token": "secret-admin-token" },
+    body: { exchangeOrderIds: [] },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(explicitIds, []);
+  assert.equal(pendingCalled, false);
+  assert.equal(response.body.count, 0);
 });
 
 test("exchange payout manual resolution marks indeterminate payout completed without rebroadcasting", async () => {

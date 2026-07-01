@@ -38,6 +38,7 @@ function liveEnv(overrides = {}) {
     EXCHANGE_PAYOUT_PRIVATE_KEY: "private-key-must-not-leak",
     EXCHANGE_PAYOUT_FROM_ADDRESS: "THotWalletAddress11111111111111",
     ENABLE_EXCHANGE_PAYOUT_ENDPOINT: "true",
+    ENABLE_EXCHANGE_PAYOUT_CRON: "true",
     ENABLE_ORDER_EXPIRY_CRON: "true",
     ENABLE_EXCHANGE_EXPIRY_CRON: "true",
     ENABLE_DEV_PAYMENT_CONFIRMATION: "false",
@@ -111,6 +112,7 @@ test("readiness report marks fully automated live configuration without leaking 
   assert.equal(report.warnings.length, 0);
   assert.equal(report.provider.apitrxApiKeyConfigured, true);
   assert.equal(report.exchangePayout.privateKeyConfigured, true);
+  assert.equal(report.exchangePayout.cronEnabled, true);
   assert.deepEqual(report.trc20.symbols, ["USDT"]);
   assert.equal(serialized.includes(env.APITRX_API_KEY), false);
   assert.equal(serialized.includes(env.EXCHANGE_PAYOUT_PRIVATE_KEY), false);
@@ -173,15 +175,14 @@ test("readiness report distinguishes dry-run from partial-live automation", () =
 
   const partial = readinessService.buildReadinessReport({
     env: {
-      ENABLE_DEPOSIT_WATCHER_CRON: "true",
-      DEPOSIT_WATCHER_PROCESS_PROVIDER_JOBS: "true",
+      ENABLE_EXCHANGE_PAYOUT_CRON: "true",
     },
   });
 
   assert.equal(partial.summary.mode, "partial-live");
   assert.equal(
     partial.warnings.some(
-      (warning) => warning.code === "PROVIDER_AUTOMATION_DRY_RUN"
+      (warning) => warning.code === "EXCHANGE_PAYOUT_AUTOMATION_DRY_RUN"
     ),
     true
   );
@@ -193,6 +194,7 @@ test("readiness report flags live gates without the full automation path", () =>
       ENABLE_DEPOSIT_WATCHER_CRON: "false",
       DEPOSIT_WATCHER_PROCESS_PROVIDER_JOBS: "false",
       DEPOSIT_WATCHER_PROCESS_EXCHANGE_PAYOUTS: "false",
+      ENABLE_EXCHANGE_PAYOUT_CRON: "false",
     }),
   });
 
@@ -207,6 +209,32 @@ test("readiness report flags live gates without the full automation path", () =>
   assert.equal(
     report.warnings.some(
       (warning) => warning.code === "EXCHANGE_PAYOUT_LIVE_WITHOUT_AUTOMATION"
+    ),
+    true
+  );
+});
+
+test("readiness report explains exchange payout partial-live when one payout path is missing", () => {
+  const withoutPendingDrain = readinessService.buildReadinessReport({
+    env: liveEnv({ ENABLE_EXCHANGE_PAYOUT_CRON: "false" }),
+  });
+
+  assert.equal(withoutPendingDrain.summary.mode, "partial-live");
+  assert.equal(
+    withoutPendingDrain.warnings.some(
+      (warning) => warning.code === "EXCHANGE_PAYOUT_LIVE_WITHOUT_PENDING_DRAIN"
+    ),
+    true
+  );
+
+  const withoutDepositTrigger = readinessService.buildReadinessReport({
+    env: liveEnv({ DEPOSIT_WATCHER_PROCESS_EXCHANGE_PAYOUTS: "false" }),
+  });
+
+  assert.equal(withoutDepositTrigger.summary.mode, "partial-live");
+  assert.equal(
+    withoutDepositTrigger.warnings.some(
+      (warning) => warning.code === "EXCHANGE_PAYOUT_LIVE_WITHOUT_DEPOSIT_TRIGGER"
     ),
     true
   );
