@@ -86,6 +86,110 @@ function logTruncationWarning(warning) {
   console.warn(`[deposit-scan] ${warning.message}`);
 }
 
+function buildSkippedPostMatchProcessing() {
+  return {
+    triggered: false,
+    attempted: 0,
+    succeeded: false,
+    failed: false,
+    resultCount: 0,
+    error: null,
+  };
+}
+
+function sanitizePostMatchProcessingCode(rawCode) {
+  const code = String(rawCode || "").trim();
+  if (/^[A-Z0-9_:-]{1,80}$/.test(code)) {
+    return code;
+  }
+  return "POST_MATCH_PROCESSING_FAILED";
+}
+
+function sanitizePostMatchProcessingError(error, message) {
+  return {
+    message,
+    code: sanitizePostMatchProcessingCode(error?.code),
+    statusCode: Number.isInteger(error?.statusCode) ? error.statusCode : null,
+  };
+}
+
+async function runPostMatchProcessor({
+  ids,
+  enabled,
+  processor,
+  failureMessage,
+  logMessage,
+}) {
+  const uniqueIds = Array.from(
+    new Set(ids.map((id) => String(id)).filter(Boolean))
+  );
+  if (!enabled || uniqueIds.length === 0) {
+    return {
+      summary: buildSkippedPostMatchProcessing(),
+      results: [],
+    };
+  }
+
+  try {
+    const results = await processor(uniqueIds);
+    return {
+      summary: {
+        triggered: true,
+        attempted: uniqueIds.length,
+        succeeded: true,
+        failed: false,
+        resultCount: Array.isArray(results) ? results.length : 0,
+        error: null,
+      },
+      results: Array.isArray(results) ? results : [],
+    };
+  } catch (error) {
+    console.error(logMessage, error);
+    return {
+      summary: {
+        triggered: true,
+        attempted: uniqueIds.length,
+        succeeded: false,
+        failed: true,
+        resultCount: 0,
+        error: sanitizePostMatchProcessingError(error, failureMessage),
+      },
+      results: [],
+    };
+  }
+}
+
+async function runPostMatchProcessing({
+  matchedOrderIds = [],
+  matchedExchangeOrderIds = [],
+  processProviderJobs = false,
+  processExchangePayouts = false,
+} = {}) {
+  const provider = await runPostMatchProcessor({
+    ids: matchedOrderIds,
+    enabled: processProviderJobs,
+    processor: (ids) => providerJobService.processOrders(ids),
+    failureMessage: "Provider post-match processing failed",
+    logMessage: "Provider processing after deposit scan failed:",
+  });
+  const exchangePayout = await runPostMatchProcessor({
+    ids: matchedExchangeOrderIds,
+    enabled: processExchangePayouts,
+    processor: (ids) => exchangePayoutJobService.processExchangeOrders(ids),
+    failureMessage: "Exchange payout post-match processing failed",
+    logMessage: "Exchange payout processing after deposit scan failed:",
+  });
+
+  return {
+    postMatchProcessing: {
+      provider: provider.summary,
+      exchangePayout: exchangePayout.summary,
+    },
+    providerResults: provider.results,
+    exchangePayoutResults: exchangePayout.results,
+  };
+}
+
 function assertDepositScanRouteEnabled(req) {
   requireEnabledAdminRoute({
     req,
@@ -568,28 +672,12 @@ async function scanConfiguredTreasury(options = {}) {
     const matchedExchangeOrderIds = results
       .map((result) => result.matchedExchangeOrderId)
       .filter(Boolean);
-    let providerResults = [];
-    if (matchedCount > 0 && options.processProviderJobs) {
-      try {
-        providerResults = await providerJobService.processOrders(matchedOrderIds);
-      } catch (error) {
-        console.error("Provider processing after deposit scan failed:", error);
-      }
-    }
-    let exchangePayoutResults = [];
-    if (
-      matchedExchangeOrderIds.length > 0 &&
-      options.processExchangePayouts
-    ) {
-      try {
-        exchangePayoutResults =
-          await exchangePayoutJobService.processExchangeOrders(
-            matchedExchangeOrderIds
-          );
-      } catch (error) {
-        console.error("Exchange payout processing after deposit scan failed:", error);
-      }
-    }
+    const postMatchResult = await runPostMatchProcessing({
+      matchedOrderIds,
+      matchedExchangeOrderIds,
+      processProviderJobs: options.processProviderJobs,
+      processExchangePayouts: options.processExchangePayouts,
+    });
 
     return {
       scanned: events.length,
@@ -598,8 +686,9 @@ async function scanConfiguredTreasury(options = {}) {
       truncated: truncationWarnings.length > 0,
       truncationWarnings,
       pageSummaries,
-      providerResults,
-      exchangePayoutResults,
+      postMatchProcessing: postMatchResult.postMatchProcessing,
+      providerResults: postMatchResult.providerResults,
+      exchangePayoutResults: postMatchResult.exchangePayoutResults,
       results,
     };
   } finally {
@@ -622,5 +711,6 @@ module.exports = {
   listDeposits,
   recordAndMatchDeposit,
   resolveDepositScanMinTimestamp,
+  runPostMatchProcessing,
   scanConfiguredTreasury,
 };

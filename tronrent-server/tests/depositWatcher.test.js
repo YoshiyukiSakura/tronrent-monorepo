@@ -9,6 +9,8 @@ const {
   isAllowedTrc20Deposit,
 } = require("../services/depositMatcher");
 const depositWatcherService = require("../services/depositWatcherService");
+const exchangePayoutJobService = require("../services/exchangePayoutJobService");
+const providerJobService = require("../services/providerJobService");
 const tronGridClient = require("../services/tronGridClient");
 const {
   assertDepositScanRouteEnabled,
@@ -17,6 +19,7 @@ const {
   fetchPaginatedInboundTransfers,
   getDepositScanMaxPages,
   resolveDepositScanMinTimestamp,
+  runPostMatchProcessing,
   scanConfiguredTreasury,
 } = depositWatcherService;
 
@@ -24,6 +27,9 @@ const ORIGINAL_ENV = { ...process.env };
 const ORIGINALS = {
   fetchInboundTrxTransfers: tronGridClient.fetchInboundTrxTransfers,
   fetchInboundTrc20Transfers: tronGridClient.fetchInboundTrc20Transfers,
+  processExchangeOrders: exchangePayoutJobService.processExchangeOrders,
+  processOrders: providerJobService.processOrders,
+  consoleError: console.error,
   consoleWarn: console.warn,
   dateNow: Date.now,
 };
@@ -33,6 +39,10 @@ test.afterEach(() => {
   tronGridClient.fetchInboundTrxTransfers = ORIGINALS.fetchInboundTrxTransfers;
   tronGridClient.fetchInboundTrc20Transfers =
     ORIGINALS.fetchInboundTrc20Transfers;
+  exchangePayoutJobService.processExchangeOrders =
+    ORIGINALS.processExchangeOrders;
+  providerJobService.processOrders = ORIGINALS.processOrders;
+  console.error = ORIGINALS.consoleError;
   console.warn = ORIGINALS.consoleWarn;
   Date.now = ORIGINALS.dateNow;
 });
@@ -310,6 +320,172 @@ test("deposit scan max pages defaults and clamps unsafe values", () => {
   assert.equal(getDepositScanMaxPages("9999"), 200);
 });
 
+test("post-match processing reports successful provider and payout triggers once", async () => {
+  const providerCalls = [];
+  const payoutCalls = [];
+
+  providerJobService.processOrders = async (orderIds) => {
+    providerCalls.push(orderIds);
+    return [{ orderId: orderIds[0], success: true }];
+  };
+  exchangePayoutJobService.processExchangeOrders = async (exchangeOrderIds) => {
+    payoutCalls.push(exchangeOrderIds);
+    return [{ exchangeOrderId: exchangeOrderIds[0], success: true }];
+  };
+
+  const result = await runPostMatchProcessing({
+    matchedOrderIds: ["energy-order-1", "energy-order-1"],
+    matchedExchangeOrderIds: ["exchange-order-1"],
+    processProviderJobs: true,
+    processExchangePayouts: true,
+  });
+
+  assert.deepEqual(providerCalls, [["energy-order-1"]]);
+  assert.deepEqual(payoutCalls, [["exchange-order-1"]]);
+  assert.deepEqual(result.postMatchProcessing.provider, {
+    triggered: true,
+    attempted: 1,
+    succeeded: true,
+    failed: false,
+    resultCount: 1,
+    error: null,
+  });
+  assert.deepEqual(result.postMatchProcessing.exchangePayout, {
+    triggered: true,
+    attempted: 1,
+    succeeded: true,
+    failed: false,
+    resultCount: 1,
+    error: null,
+  });
+  assert.deepEqual(result.providerResults, [
+    { orderId: "energy-order-1", success: true },
+  ]);
+  assert.deepEqual(result.exchangePayoutResults, [
+    { exchangeOrderId: "exchange-order-1", success: true },
+  ]);
+});
+
+test("post-match processing surfaces provider failure and still runs payout", async () => {
+  const errors = [];
+  const payoutCalls = [];
+  console.error = (...args) => {
+    errors.push(args);
+  };
+  providerJobService.processOrders = async () => {
+    const error = new Error("provider secret api-key should not leak");
+    error.code = "PROVIDER_DOWN";
+    throw error;
+  };
+  exchangePayoutJobService.processExchangeOrders = async (exchangeOrderIds) => {
+    payoutCalls.push(exchangeOrderIds);
+    return [{ exchangeOrderId: exchangeOrderIds[0], success: true }];
+  };
+
+  const result = await runPostMatchProcessing({
+    matchedOrderIds: ["energy-order-1"],
+    matchedExchangeOrderIds: ["exchange-order-1"],
+    processProviderJobs: true,
+    processExchangePayouts: true,
+  });
+
+  assert.equal(result.postMatchProcessing.provider.triggered, true);
+  assert.equal(result.postMatchProcessing.provider.succeeded, false);
+  assert.equal(result.postMatchProcessing.provider.failed, true);
+  assert.deepEqual(result.postMatchProcessing.provider.error, {
+    message: "Provider post-match processing failed",
+    code: "PROVIDER_DOWN",
+    statusCode: null,
+  });
+  assert.equal(
+    JSON.stringify(result.postMatchProcessing).includes("api-key"),
+    false
+  );
+  assert.deepEqual(result.providerResults, []);
+  assert.deepEqual(payoutCalls, [["exchange-order-1"]]);
+  assert.equal(result.postMatchProcessing.exchangePayout.succeeded, true);
+  assert.equal(errors.length, 1);
+});
+
+test("post-match processing surfaces exchange payout failure without throwing", async () => {
+  const errors = [];
+  console.error = (...args) => {
+    errors.push(args);
+  };
+  providerJobService.processOrders = async (orderIds) => [
+    { orderId: orderIds[0], success: true },
+  ];
+  exchangePayoutJobService.processExchangeOrders = async () => {
+    const error = new Error("private key must not leak");
+    error.code = "private-key-secret";
+    error.statusCode = 503;
+    throw error;
+  };
+
+  const result = await runPostMatchProcessing({
+    matchedOrderIds: ["energy-order-1"],
+    matchedExchangeOrderIds: ["exchange-order-1"],
+    processProviderJobs: true,
+    processExchangePayouts: true,
+  });
+
+  assert.equal(result.postMatchProcessing.provider.succeeded, true);
+  assert.equal(result.postMatchProcessing.exchangePayout.triggered, true);
+  assert.equal(result.postMatchProcessing.exchangePayout.succeeded, false);
+  assert.deepEqual(result.postMatchProcessing.exchangePayout.error, {
+    message: "Exchange payout post-match processing failed",
+    code: "POST_MATCH_PROCESSING_FAILED",
+    statusCode: 503,
+  });
+  assert.equal(
+    JSON.stringify(result.postMatchProcessing).includes("private key"),
+    false
+  );
+  assert.deepEqual(result.exchangePayoutResults, []);
+  assert.equal(errors.length, 1);
+});
+
+test("post-match processing is inert when flags are off or no ids matched", async () => {
+  let providerCalled = false;
+  let payoutCalled = false;
+  providerJobService.processOrders = async () => {
+    providerCalled = true;
+    return [];
+  };
+  exchangePayoutJobService.processExchangeOrders = async () => {
+    payoutCalled = true;
+    return [];
+  };
+
+  const disabledResult = await runPostMatchProcessing({
+    matchedOrderIds: ["energy-order-1"],
+    matchedExchangeOrderIds: ["exchange-order-1"],
+    processProviderJobs: false,
+    processExchangePayouts: false,
+  });
+  const noMatchResult = await runPostMatchProcessing({
+    matchedOrderIds: [],
+    matchedExchangeOrderIds: [],
+    processProviderJobs: true,
+    processExchangePayouts: true,
+  });
+
+  assert.equal(providerCalled, false);
+  assert.equal(payoutCalled, false);
+  assert.deepEqual(disabledResult.postMatchProcessing.provider, {
+    triggered: false,
+    attempted: 0,
+    succeeded: false,
+    failed: false,
+    resultCount: 0,
+    error: null,
+  });
+  assert.deepEqual(
+    disabledResult.postMatchProcessing,
+    noMatchResult.postMatchProcessing
+  );
+});
+
 test("deposit scan min timestamp freezes lookback once per scan", async () => {
   process.env.TREASURY_TRON_ADDRESS = "TTreasury111111111111111111111111111";
   process.env.DEPOSIT_SCAN_LOOKBACK_MINUTES = "1";
@@ -465,6 +641,24 @@ test("configured treasury scan returns and logs truncation warnings", async () =
   assert.equal(result.truncationWarnings.length, 1);
   assert.equal(result.truncationWarnings[0].asset, "TRX");
   assert.equal(result.truncationWarnings[0].pageCount, 2);
+  assert.deepEqual(result.postMatchProcessing, {
+    provider: {
+      triggered: false,
+      attempted: 0,
+      succeeded: false,
+      failed: false,
+      resultCount: 0,
+      error: null,
+    },
+    exchangePayout: {
+      triggered: false,
+      attempted: 0,
+      succeeded: false,
+      failed: false,
+      resultCount: 0,
+      error: null,
+    },
+  });
   assert.equal(warnMessages.length, 1);
   assert.match(warnMessages[0], /reached 2 pages/);
   assert.deepEqual(

@@ -134,6 +134,13 @@ defaults to `20` and is capped at `200`. When the cap is reached while TronGrid
 still reports another page, the scan returns `truncated: true` with
 `truncationWarnings[]` and logs a warning for operator follow-up.
 
+When deposit-triggered provider or exchange payout processing is requested, the
+scan response includes `postMatchProcessing`. This reports whether each
+post-match processor was triggered, how many matched order IDs were attempted,
+whether it succeeded, and a sanitized error code/message if processor setup
+failed. Matching remains durable even if a post-match processor fails; use the
+provider or payout review endpoints for reconciliation.
+
 ## API
 
 ### Plans
