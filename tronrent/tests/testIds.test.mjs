@@ -30,6 +30,16 @@ test("frontend test ids are unique and stable", () => {
   }
 });
 
+test("README documents every frontend browser-proof test id", () => {
+  const readme = readSource("README.md");
+  for (const [key, testId] of Object.entries(FRONTEND_TEST_IDS)) {
+    assert.ok(
+      readme.includes(`\`${testId}\``),
+      `README.md must document FRONTEND_TEST_IDS.${key} (${testId})`
+    );
+  }
+});
+
 test("rent page exposes proof selectors for browser smoke tests", () => {
   const source = readSource("src/app/rent/page.tsx");
   assert.match(source, /data-testid={FRONTEND_TEST_IDS\.rentCreateOrderCta}/);

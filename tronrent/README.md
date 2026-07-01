@@ -1,14 +1,28 @@
-# TronRent - Tron Energy Rental Service
+# TronRent Frontend
 
-TronRent is a platform that allows users to rent Tron energy resources on-demand, helping them save on transaction fees and optimize their DApp performance without long-term staking commitments.
+TronRent is the browser surface for a lightweight Tron energy rental and
+TRX/USDT exchange service. Users create an order, pay the exact amount to a
+treasury address by connected wallet or manual transfer, and the backend chain
+scanner remains the source of truth for settlement. After payment confirmation,
+the backend can buy energy from the prepaid APITRX provider balance or broadcast
+an exchange payout from the configured hot wallet.
+
+The frontend is a transaction helper and status surface. It never marks orders
+as paid, never stores provider API keys or hot-wallet secrets, and fails closed
+when public treasury or token allowlists are missing.
 
 ## Features
 
-- **Instant Energy Access**: Get immediate access to Tron energy resources without long-term staking commitments.
-- **Cost-Effective**: Pay only for the energy you need, reducing overall transaction costs on the Tron network.
-- **Secure & Trustless**: Our smart contracts ensure secure, transparent, and trustless energy rental transactions.
-- **Flexible Rental Options**: Choose from various rental packages based on your needs and budget.
-- **Provider Opportunities**: Stake your TRX and earn passive income by becoming an energy provider.
+- **Energy rental orders**: Users choose a server-priced energy plan, enter the
+  target Tron address, and receive exact TRX payment instructions.
+- **Two payment paths**: Orders support connected-wallet payment to the treasury
+  or manual transfer to the displayed treasury address and unique amount.
+- **TRX/USDT exchange orders**: Users can quote and create TRX-to-USDT or
+  USDT-to-TRX orders, then deposit the exact required asset amount.
+- **Wallet transaction helpers**: TronLink can initiate TRX and allowlisted USDT
+  transfers, but backend chain scanning still confirms funding.
+- **Operator console**: `/ops` exposes admin-gated readiness, backlog, scan, and
+  drain actions without persisting the admin token or rendering raw secrets.
 
 ## Getting Started
 
@@ -42,27 +56,35 @@ TronRent is a platform that allows users to rent Tron energy resources on-demand
    yarn dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+4. Open [http://localhost:3100](http://localhost:3100) in your browser to see the application.
 
 ## Technology Stack
 
-- **Frontend**: Next.js, React, TailwindCSS
-- **Blockchain Integration**: TronWeb (to be implemented)
-- **Smart Contracts**: Solidity (to be implemented)
+- **Frontend**: Next.js, React, TypeScript, TailwindCSS
+- **Wallet integration**: TronLink-compatible TronWeb flow through the wallet
+  context.
+- **Backend integration**: REST APIs served by `tronrent-server` for plans,
+  orders, exchange quotes/orders, readiness, backlog, and admin actions.
 
 ## Verification Hooks
 
-The rent and exchange pages expose stable `data-testid` selectors for browser
-smoke tests:
+The rent, exchange, and ops pages expose stable `data-testid` selectors for
+browser smoke tests:
 
 - Rent: `rent-create-order-cta`, `rent-payment-instructions`,
   `rent-order-id`, `rent-order-status`, `rent-refresh-status`,
   `rent-wallet-payment-cta`, `rent-wallet-payment-txid`,
-  `rent-polling-error`
+  `rent-payment-method-wallet`, `rent-payment-method-deposit`,
+  `rent-payment-amount`, `rent-payment-address`,
+  `rent-payment-reference`, `rent-polling-error`
 - Exchange: `exchange-create-order-cta`, `exchange-deposit-instructions`,
   `exchange-order-id`, `exchange-order-status`, `exchange-refresh-status`,
   `exchange-wallet-deposit-cta`, `exchange-wallet-deposit-txid`,
   `exchange-polling-error`
+- Ops: `ops-token-input`, `ops-load-status`, `ops-mode`,
+  `ops-ready-for-live`, `ops-warnings`, `ops-backlog-summary`,
+  `ops-confirm-actions`, `ops-scan-deposits`, `ops-drain-provider`,
+  `ops-drain-exchange`, `ops-action-result`, `ops-error`
 
 Run the frontend regression checks with:
 
@@ -116,13 +138,15 @@ addresses, txids, upstream payloads, and secret-shaped fields are not rendered.
 
 ## Roadmap
 
-- [x] Initial landing page
-- [ ] Wallet connection functionality
-- [ ] Smart contract development for energy rental
-- [ ] User dashboard for managing rentals
-- [ ] Provider dashboard for managing energy offerings
-- [ ] Payment integration
-- [ ] Mobile optimization
+- [x] Energy rental order creation and exact treasury payment instructions
+- [x] Connected-wallet TRX payment helper for rental orders
+- [x] Manual deposit-address payment path with browser E2E proof
+- [x] TRX/USDT exchange quote and order surface
+- [x] Connected-wallet TRX/USDT deposit helpers for exchange orders
+- [x] Admin-gated operator console for readiness, backlog, scan, and drains
+- [ ] Exchange manual-deposit selector parity with rental payment instructions
+- [ ] User-facing order history and manual-review status explanations
+- [ ] Mobile layout pass for repeated rental/exchange workflows
 
 ## Contributing
 
@@ -138,4 +162,4 @@ For any inquiries, please reach out to us at contact@tronrent.com (placeholder).
 
 ---
 
-Built with ❤️ for the Tron community.
+Built for the TronRent monorepo.
