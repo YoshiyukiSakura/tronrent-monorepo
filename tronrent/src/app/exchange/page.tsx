@@ -32,6 +32,7 @@ import {
   replaceOrderIdInUrl,
 } from "@/lib/orderRecovery";
 import type { RecentOrderEntry } from "@/lib/orderRecovery";
+import { FRONTEND_TEST_IDS } from "@/lib/testIds";
 import { sendExchangeWalletDeposit } from "@/lib/walletPayment";
 
 function makeIdempotencyKey() {
@@ -95,6 +96,7 @@ export default function ExchangePage() {
     null
   );
   const [pollingError, setPollingError] = useState<string | null>(null);
+  const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
   const [recentOrders, setRecentOrders] = useState<RecentOrderEntry[]>([]);
   const [recoveryOrderId, setRecoveryOrderId] = useState("");
   const [isRecoveringOrder, setIsRecoveringOrder] = useState(false);
@@ -266,6 +268,26 @@ export default function ExchangePage() {
     await navigator.clipboard.writeText(value);
     setCopiedField(field);
     window.setTimeout(() => setCopiedField(null), 1200);
+  };
+
+  const handleRefreshOrderStatus = async () => {
+    if (!createdOrderId) return;
+
+    try {
+      setIsRefreshingOrder(true);
+      const order = await getExchangeOrder(createdOrderId);
+      setCreatedOrder(order);
+      setRecentOrders(rememberExchangeOrder(order));
+      setPollingError(null);
+    } catch (refreshError) {
+      setPollingError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "兑换订单状态刷新失败。"
+      );
+    } finally {
+      setIsRefreshingOrder(false);
+    }
   };
 
   const handleGetQuote = async () => {
@@ -557,6 +579,7 @@ export default function ExchangePage() {
                 <button
                   type="button"
                   onClick={handleCreateOrder}
+                  data-testid={FRONTEND_TEST_IDS.exchangeCreateOrderCta}
                   disabled={
                     !quote ||
                     quoteExpired ||
@@ -656,14 +679,16 @@ export default function ExchangePage() {
               />
 
               {createdOrder && (
-                <div>
+                <div data-testid={FRONTEND_TEST_IDS.exchangeDepositInstructions}>
                   <div className="mb-3 flex items-center justify-between gap-4">
                     <h4 className="font-bold">兑换付款指引</h4>
                     {exchangeStatusMeta && (
-                      <StatusPill
-                        label={exchangeStatusMeta.label}
-                        tone={exchangeStatusMeta.tone}
-                      />
+                      <div data-testid={FRONTEND_TEST_IDS.exchangeOrderStatus}>
+                        <StatusPill
+                          label={exchangeStatusMeta.label}
+                          tone={exchangeStatusMeta.tone}
+                        />
+                      </div>
                     )}
                   </div>
                   {exchangeStatusMeta && (
@@ -674,12 +699,27 @@ export default function ExchangePage() {
                       <StatusTimeline steps={exchangeTimeline} />
                     </div>
                   )}
-                  <InstructionRow
-                    label="订单号"
-                    value={createdOrder.id}
-                    copied={copiedField === "order"}
-                    onCopy={() => copyText("order", createdOrder.id)}
-                  />
+                  <button
+                    type="button"
+                    onClick={handleRefreshOrderStatus}
+                    disabled={isRefreshingOrder}
+                    data-testid={FRONTEND_TEST_IDS.exchangeRefreshStatus}
+                    className={`mb-4 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                      isRefreshingOrder
+                        ? "bg-gray-600 cursor-not-allowed"
+                        : "bg-[#2d3748] hover:bg-[#4a5568]"
+                    }`}
+                  >
+                    {isRefreshingOrder ? "刷新中..." : "刷新状态"}
+                  </button>
+                  <div data-testid={FRONTEND_TEST_IDS.exchangeOrderId}>
+                    <InstructionRow
+                      label="订单号"
+                      value={createdOrder.id}
+                      copied={copiedField === "order"}
+                      onCopy={() => copyText("order", createdOrder.id)}
+                    />
+                  </div>
                   <InstructionRow
                     label="精确打款金额"
                     value={createdOrder.depositInstructions.amountDisplay}
@@ -806,7 +846,10 @@ export default function ExchangePage() {
                     </div>
                   )}
                   {pollingError && (
-                    <p className="mt-3 text-xs text-orange-200">
+                    <p
+                      className="mt-3 text-xs text-orange-200"
+                      data-testid={FRONTEND_TEST_IDS.exchangePollingError}
+                    >
                       状态刷新失败：{pollingError}
                     </p>
                   )}

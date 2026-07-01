@@ -50,6 +50,24 @@ TronRent is a platform that allows users to rent Tron energy resources on-demand
 - **Blockchain Integration**: TronWeb (to be implemented)
 - **Smart Contracts**: Solidity (to be implemented)
 
+## Verification Hooks
+
+The rent and exchange pages expose stable `data-testid` selectors for browser
+smoke tests:
+
+- Rent: `rent-create-order-cta`, `rent-payment-instructions`,
+  `rent-order-id`, `rent-order-status`, `rent-refresh-status`,
+  `rent-polling-error`
+- Exchange: `exchange-create-order-cta`, `exchange-deposit-instructions`,
+  `exchange-order-id`, `exchange-order-status`, `exchange-refresh-status`,
+  `exchange-polling-error`
+
+Run the frontend regression checks with:
+
+```bash
+npm test
+```
+
 ## Roadmap
 
 - [x] Initial landing page

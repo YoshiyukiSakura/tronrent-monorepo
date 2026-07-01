@@ -8,7 +8,8 @@
     "build": "NEXT_DIST_DIR=.next-build next build",
     "start": "NEXT_DIST_DIR=.next-build next start",
     "lint": "next lint",
-    "test:wallet": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:wallet": "npm test"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.12.0",
