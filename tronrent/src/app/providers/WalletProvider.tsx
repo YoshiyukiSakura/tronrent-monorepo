@@ -22,6 +22,7 @@ interface WalletContextType {
   balance: number | null;
   isConnected: boolean;
   isConnecting: boolean;
+  tronWeb: TronWebInstance | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -31,12 +32,44 @@ const WalletContext = createContext<WalletContextType>({
   balance: null,
   isConnected: false,
   isConnecting: false,
+  tronWeb: null,
   connect: async () => {},
   disconnect: async () => {},
 });
 
+const E2E_WALLET_MOCK_REQUESTED =
+  process.env.NEXT_PUBLIC_E2E_WALLET_MOCK === "1";
+
+function assertE2EWalletMockNotProduction() {
+  if (process.env.NODE_ENV === "production" && E2E_WALLET_MOCK_REQUESTED) {
+    throw new Error(
+      "NEXT_PUBLIC_E2E_WALLET_MOCK must never be enabled in production."
+    );
+  }
+}
+
+function isE2EWalletMockEnabled() {
+  assertE2EWalletMockNotProduction();
+  return process.env.NODE_ENV !== "production" && E2E_WALLET_MOCK_REQUESTED;
+}
+
+function getWindowTronWeb() {
+  if (typeof window === "undefined" || !window.tronWeb) {
+    return null;
+  }
+  return window.tronWeb as unknown as TronWebInstance;
+}
+
 // 钱包提供者组件
 export function WalletProvider({ children }: { children: ReactNode }) {
+  if (isE2EWalletMockEnabled()) {
+    return <E2EWalletContextWrapper>{children}</E2EWalletContextWrapper>;
+  }
+
+  return <TronLinkWalletProvider>{children}</TronLinkWalletProvider>;
+}
+
+function TronLinkWalletProvider({ children }: { children: ReactNode }) {
   // 创建钱包适配器
   const adapters = useMemo(() => [new TronLinkAdapter()], []);
 
@@ -65,12 +98,14 @@ function WalletContextWrapper({ children }: { children: ReactNode }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [tronWeb, setTronWeb] = useState<TronWebInstance | null>(null);
 
   // Update state when wallet connection changes
   useEffect(() => {
     setIsConnected(connected);
     setIsConnecting(connecting);
     setAddress(walletAddress || null);
+    setTronWeb(getWindowTronWeb());
   }, [connected, connecting, walletAddress]);
 
   // Fetch balance when connected
@@ -78,6 +113,7 @@ function WalletContextWrapper({ children }: { children: ReactNode }) {
     const fetchBalance = async () => {
       if (connected && walletAddress && window.tronWeb) {
         try {
+          setTronWeb(getWindowTronWeb());
           const balanceInSun = await window.tronWeb.trx.getBalance(
             walletAddress
           );
@@ -88,6 +124,7 @@ function WalletContextWrapper({ children }: { children: ReactNode }) {
         }
       } else {
         setBalance(null);
+        setTronWeb(null);
       }
     };
 
@@ -141,6 +178,79 @@ function WalletContextWrapper({ children }: { children: ReactNode }) {
         balance,
         isConnected,
         isConnecting,
+        tronWeb,
+        connect,
+        disconnect,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
+  );
+}
+
+function E2EWalletContextWrapper({ children }: { children: ReactNode }) {
+  const [tronWeb, setTronWeb] = useState<TronWebInstance | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [balance, setBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMockWallet = async () => {
+      try {
+        const mockModule = (await import("@/lib/dev/e2eWalletMock")) as unknown as {
+          createE2ETronWebMock: () => any;
+          installE2EWalletMockOnWindow: (options: {
+            windowRef: Window;
+            tronWeb: any;
+          }) => any;
+        };
+        const mockTronWeb = mockModule.createE2ETronWebMock();
+        mockModule.installE2EWalletMockOnWindow({
+          windowRef: window,
+          tronWeb: mockTronWeb,
+        });
+        const balanceSun = await mockTronWeb.trx.getBalance(
+          mockTronWeb.defaultAddress.base58
+        );
+
+        if (!isMounted) return;
+        setTronWeb(mockTronWeb);
+        setBalance(balanceSun / 1_000_000);
+        setIsConnected(true);
+      } catch (error) {
+        console.error("Failed to install TronRent E2E wallet mock:", error);
+      } finally {
+        if (isMounted) {
+          setIsConnecting(false);
+        }
+      }
+    };
+
+    void loadMockWallet();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const connect = async () => {
+    setIsConnected(Boolean(tronWeb));
+  };
+
+  const disconnect = async () => {
+    setIsConnected(false);
+  };
+
+  return (
+    <WalletContext.Provider
+      value={{
+        address: isConnected ? tronWeb?.defaultAddress.base58 || null : null,
+        balance: isConnected ? balance : null,
+        isConnected,
+        isConnecting,
+        tronWeb: isConnected ? tronWeb : null,
         connect,
         disconnect,
       }}

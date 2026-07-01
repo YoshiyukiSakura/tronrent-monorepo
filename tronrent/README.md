@@ -57,9 +57,11 @@ smoke tests:
 
 - Rent: `rent-create-order-cta`, `rent-payment-instructions`,
   `rent-order-id`, `rent-order-status`, `rent-refresh-status`,
+  `rent-wallet-payment-cta`, `rent-wallet-payment-txid`,
   `rent-polling-error`
 - Exchange: `exchange-create-order-cta`, `exchange-deposit-instructions`,
   `exchange-order-id`, `exchange-order-status`, `exchange-refresh-status`,
+  `exchange-wallet-deposit-cta`, `exchange-wallet-deposit-txid`,
   `exchange-polling-error`
 
 Run the frontend regression checks with:
@@ -72,6 +74,22 @@ These tests include a React server-render smoke for the selector-bearing proof
 components and source checks that the pages wire those components to the stable
 selectors. They are a prerequisite for browser E2E, not a replacement for a
 full Playwright flow.
+
+The wallet payment browser smoke uses a dev/test-only TronLink-compatible mock.
+It is enabled only when `NODE_ENV !== "production"` and
+`NEXT_PUBLIC_E2E_WALLET_MOCK=1`; production builds fail fast if that flag is set.
+The mock only broadcasts TRX/TRC20 transactions and records txids. Order
+settlement still comes from backend polling and chain scanning.
+
+Run the browser wallet smoke with:
+
+```bash
+npm run test:e2e:wallet
+```
+
+The Playwright config starts Next on port `3110`, injects the wallet mock, and
+writes browser artifacts outside the app directory at
+`../outputs/tronrent-wallet-e2e` so Next dev does not hot-reload on test output.
 
 ## Roadmap
 

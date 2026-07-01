@@ -9,6 +9,7 @@
     "start": "NEXT_DIST_DIR=.next-build next start",
     "lint": "next lint",
     "test": "node --test tests/*.test.mjs",
+    "test:e2e:wallet": "playwright test -c playwright.config.mjs",
     "test:wallet": "npm test"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

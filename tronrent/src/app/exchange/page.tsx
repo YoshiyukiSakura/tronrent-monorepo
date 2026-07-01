@@ -79,7 +79,7 @@ function exchangeDepositStorageKey(orderId: string) {
 }
 
 export default function ExchangePage() {
-  const { address, connect, isConnected } = useWallet();
+  const { address, connect, isConnected, tronWeb } = useWallet();
   const [direction, setDirection] = useState<ExchangeDirection>("TRX_TO_USDT");
   const [inputAmount, setInputAmount] = useState("100");
   const [outputAddress, setOutputAddress] = useState("");
@@ -393,7 +393,7 @@ export default function ExchangePage() {
       setWalletDepositTxId("broadcasting");
 
       const result = await sendExchangeWalletDeposit({
-        tronWeb: window.tronWeb,
+        tronWeb,
         connectedAddress: address,
         order: createdOrder,
         expectedNetwork: process.env.NEXT_PUBLIC_TRON_NETWORK || "mainnet",
@@ -815,6 +815,7 @@ export default function ExchangePage() {
                       <button
                         type="button"
                         onClick={handleWalletDeposit}
+                        data-testid={FRONTEND_TEST_IDS.exchangeWalletDepositCta}
                         disabled={walletDepositState !== "idle"}
                         className={`w-full rounded-md px-4 py-3 text-sm font-medium transition-colors ${
                           walletDepositState === "idle"
@@ -835,14 +836,18 @@ export default function ExchangePage() {
                         网络: {process.env.NEXT_PUBLIC_TRON_NETWORK || "mainnet"}
                       </p>
                       {walletDepositDisplayEvidence && (
-                        <InstructionRow
-                          label="交易哈希"
-                          value={walletDepositDisplayEvidence}
-                          copied={copiedField === "depositTx"}
-                          onCopy={() =>
-                            copyText("depositTx", walletDepositDisplayEvidence)
-                          }
-                        />
+                        <ProofSelectorRegion
+                          testId={FRONTEND_TEST_IDS.exchangeWalletDepositTxid}
+                        >
+                          <InstructionRow
+                            label="交易哈希"
+                            value={walletDepositDisplayEvidence}
+                            copied={copiedField === "depositTx"}
+                            onCopy={() =>
+                              copyText("depositTx", walletDepositDisplayEvidence)
+                            }
+                          />
+                        </ProofSelectorRegion>
                       )}
                       {walletDepositError && (
                         <p className="mt-3 text-xs text-red-200">

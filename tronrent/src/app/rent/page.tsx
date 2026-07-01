@@ -52,7 +52,7 @@ function formatEnergy(energyAmount: number) {
 }
 
 export default function RentPage() {
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected, connect, tronWeb } = useWallet();
   const [plans, setPlans] = useState<EnergyPlan[]>([]);
   const [plansError, setPlansError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
@@ -291,7 +291,7 @@ export default function RentPage() {
       setWalletPaymentError(null);
 
       const result = await sendWalletTrxPayment({
-        tronWeb: window.tronWeb,
+        tronWeb,
         connectedAddress: address,
         order: createdOrder,
         expectedNetwork: process.env.NEXT_PUBLIC_TRON_NETWORK || "mainnet",
@@ -661,6 +661,7 @@ export default function RentPage() {
                       <button
                         type="button"
                         onClick={handleWalletPayment}
+                        data-testid={FRONTEND_TEST_IDS.rentWalletPaymentCta}
                         disabled={walletPaymentState !== "idle"}
                         className={`w-full rounded-md px-4 py-3 text-sm font-medium transition-colors ${
                           walletPaymentState === "idle"
@@ -678,12 +679,16 @@ export default function RentPage() {
                         钱包只负责发起 TRX 转账，订单是否付款以链上扫描结果为准。
                       </p>
                       {walletPaymentTxId && (
-                        <InstructionRow
-                          label="交易哈希"
-                          value={walletPaymentTxId}
-                          copied={copiedField === "txid"}
-                          onCopy={() => copyText("txid", walletPaymentTxId)}
-                        />
+                        <ProofSelectorRegion
+                          testId={FRONTEND_TEST_IDS.rentWalletPaymentTxid}
+                        >
+                          <InstructionRow
+                            label="交易哈希"
+                            value={walletPaymentTxId}
+                            copied={copiedField === "txid"}
+                            onCopy={() => copyText("txid", walletPaymentTxId)}
+                          />
+                        </ProofSelectorRegion>
                       )}
                       {walletPaymentError && (
                         <p className="mt-3 text-xs text-red-200">

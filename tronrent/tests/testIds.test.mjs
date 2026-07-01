@@ -51,6 +51,14 @@ test("rent page exposes proof selectors for browser smoke tests", () => {
   );
   assert.match(
     source,
+    /data-testid={FRONTEND_TEST_IDS\.rentWalletPaymentCta}/
+  );
+  assert.match(
+    source,
+    /testId={FRONTEND_TEST_IDS\.rentWalletPaymentTxid}/
+  );
+  assert.match(
+    source,
     /<ProofPollingError[\s\S]*?testId={FRONTEND_TEST_IDS\.rentPollingError}/
   );
 });
@@ -79,7 +87,38 @@ test("exchange page exposes proof selectors for browser smoke tests", () => {
   );
   assert.match(
     source,
+    /data-testid={FRONTEND_TEST_IDS\.exchangeWalletDepositCta}/
+  );
+  assert.match(
+    source,
+    /testId={FRONTEND_TEST_IDS\.exchangeWalletDepositTxid}/
+  );
+  assert.match(
+    source,
     /<ProofPollingError[\s\S]*?testId={FRONTEND_TEST_IDS\.exchangePollingError}/
+  );
+});
+
+test("wallet pages route payments through the wallet context tronWeb seam", () => {
+  const rentSource = readSource("src/app/rent/page.tsx");
+  const exchangeSource = readSource("src/app/exchange/page.tsx");
+
+  assert.match(rentSource, /const \{ address, isConnected, connect, tronWeb \} = useWallet\(\)/);
+  assert.match(exchangeSource, /const \{ address, connect, isConnected, tronWeb \} = useWallet\(\)/);
+  assert.doesNotMatch(rentSource, /tronWeb:\s*window\.tronWeb/);
+  assert.doesNotMatch(exchangeSource, /tronWeb:\s*window\.tronWeb/);
+});
+
+test("e2e wallet mock is gated and dynamically loaded from the provider", () => {
+  const providerSource = readSource("src/app/providers/WalletProvider.tsx");
+  const nextConfigSource = readSource("next.config.ts");
+
+  assert.match(providerSource, /NEXT_PUBLIC_E2E_WALLET_MOCK/);
+  assert.match(providerSource, /process\.env\.NODE_ENV === "production"/);
+  assert.match(providerSource, /import\("@\/lib\/dev\/e2eWalletMock"\)/);
+  assert.match(
+    nextConfigSource,
+    /NEXT_PUBLIC_E2E_WALLET_MOCK[\s\S]*production builds/
   );
 });
 
@@ -89,6 +128,8 @@ function renderProofSurface({
   pollingErrorTestId,
   refreshTestId,
   statusTestId,
+  walletCtaTestId,
+  walletTxidTestId,
 }) {
   return renderToStaticMarkup(
     React.createElement(
@@ -108,6 +149,16 @@ function renderProofSurface({
         { testId: orderIdTestId },
         "order-123"
       ),
+      React.createElement(
+        "button",
+        { "data-testid": walletCtaTestId },
+        "用钱包付款"
+      ),
+      React.createElement(
+        ProofSelectorRegion,
+        { testId: walletTxidTestId },
+        "tx-123"
+      ),
       React.createElement(ProofPollingError, {
         message: "network down",
         testId: pollingErrorTestId,
@@ -123,6 +174,8 @@ test("proof selector components server-render rent browser-smoke hooks", () => {
     pollingErrorTestId: FRONTEND_TEST_IDS.rentPollingError,
     refreshTestId: FRONTEND_TEST_IDS.rentRefreshStatus,
     statusTestId: FRONTEND_TEST_IDS.rentOrderStatus,
+    walletCtaTestId: FRONTEND_TEST_IDS.rentWalletPaymentCta,
+    walletTxidTestId: FRONTEND_TEST_IDS.rentWalletPaymentTxid,
   });
 
   for (const testId of [
@@ -130,6 +183,8 @@ test("proof selector components server-render rent browser-smoke hooks", () => {
     FRONTEND_TEST_IDS.rentOrderId,
     FRONTEND_TEST_IDS.rentOrderStatus,
     FRONTEND_TEST_IDS.rentRefreshStatus,
+    FRONTEND_TEST_IDS.rentWalletPaymentCta,
+    FRONTEND_TEST_IDS.rentWalletPaymentTxid,
     FRONTEND_TEST_IDS.rentPollingError,
   ]) {
     assert.match(html, new RegExp(`data-testid="${testId}"`));
@@ -145,6 +200,8 @@ test("proof selector components server-render exchange browser-smoke hooks", () 
     pollingErrorTestId: FRONTEND_TEST_IDS.exchangePollingError,
     refreshTestId: FRONTEND_TEST_IDS.exchangeRefreshStatus,
     statusTestId: FRONTEND_TEST_IDS.exchangeOrderStatus,
+    walletCtaTestId: FRONTEND_TEST_IDS.exchangeWalletDepositCta,
+    walletTxidTestId: FRONTEND_TEST_IDS.exchangeWalletDepositTxid,
   });
 
   for (const testId of [
@@ -152,6 +209,8 @@ test("proof selector components server-render exchange browser-smoke hooks", () 
     FRONTEND_TEST_IDS.exchangeOrderId,
     FRONTEND_TEST_IDS.exchangeOrderStatus,
     FRONTEND_TEST_IDS.exchangeRefreshStatus,
+    FRONTEND_TEST_IDS.exchangeWalletDepositCta,
+    FRONTEND_TEST_IDS.exchangeWalletDepositTxid,
     FRONTEND_TEST_IDS.exchangePollingError,
   ]) {
     assert.match(html, new RegExp(`data-testid="${testId}"`));
