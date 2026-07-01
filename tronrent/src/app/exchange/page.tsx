@@ -6,6 +6,11 @@ import Link from "next/link";
 import { FaArrowRightArrowLeft, FaRotate } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import {
+  ProofPollingError,
+  ProofRefreshButton,
+  ProofSelectorRegion,
+} from "@/components/ProofSelectors";
 import RecentOrdersPanel from "@/components/RecentOrdersPanel";
 import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
@@ -679,16 +684,20 @@ export default function ExchangePage() {
               />
 
               {createdOrder && (
-                <div data-testid={FRONTEND_TEST_IDS.exchangeDepositInstructions}>
+                <ProofSelectorRegion
+                  testId={FRONTEND_TEST_IDS.exchangeDepositInstructions}
+                >
                   <div className="mb-3 flex items-center justify-between gap-4">
                     <h4 className="font-bold">兑换付款指引</h4>
                     {exchangeStatusMeta && (
-                      <div data-testid={FRONTEND_TEST_IDS.exchangeOrderStatus}>
+                      <ProofSelectorRegion
+                        testId={FRONTEND_TEST_IDS.exchangeOrderStatus}
+                      >
                         <StatusPill
                           label={exchangeStatusMeta.label}
                           tone={exchangeStatusMeta.tone}
                         />
-                      </div>
+                      </ProofSelectorRegion>
                     )}
                   </div>
                   {exchangeStatusMeta && (
@@ -699,27 +708,24 @@ export default function ExchangePage() {
                       <StatusTimeline steps={exchangeTimeline} />
                     </div>
                   )}
-                  <button
-                    type="button"
+                  <ProofRefreshButton
                     onClick={handleRefreshOrderStatus}
-                    disabled={isRefreshingOrder}
-                    data-testid={FRONTEND_TEST_IDS.exchangeRefreshStatus}
+                    isRefreshing={isRefreshingOrder}
+                    testId={FRONTEND_TEST_IDS.exchangeRefreshStatus}
                     className={`mb-4 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
                       isRefreshingOrder
                         ? "bg-gray-600 cursor-not-allowed"
                         : "bg-[#2d3748] hover:bg-[#4a5568]"
                     }`}
-                  >
-                    {isRefreshingOrder ? "刷新中..." : "刷新状态"}
-                  </button>
-                  <div data-testid={FRONTEND_TEST_IDS.exchangeOrderId}>
+                  />
+                  <ProofSelectorRegion testId={FRONTEND_TEST_IDS.exchangeOrderId}>
                     <InstructionRow
                       label="订单号"
                       value={createdOrder.id}
                       copied={copiedField === "order"}
                       onCopy={() => copyText("order", createdOrder.id)}
                     />
-                  </div>
+                  </ProofSelectorRegion>
                   <InstructionRow
                     label="精确打款金额"
                     value={createdOrder.depositInstructions.amountDisplay}
@@ -845,15 +851,12 @@ export default function ExchangePage() {
                       )}
                     </div>
                   )}
-                  {pollingError && (
-                    <p
-                      className="mt-3 text-xs text-orange-200"
-                      data-testid={FRONTEND_TEST_IDS.exchangePollingError}
-                    >
-                      状态刷新失败：{pollingError}
-                    </p>
-                  )}
-                </div>
+                  <ProofPollingError
+                    className="mt-3 text-xs text-orange-200"
+                    message={pollingError}
+                    testId={FRONTEND_TEST_IDS.exchangePollingError}
+                  />
+                </ProofSelectorRegion>
               )}
             </aside>
           </div>

@@ -6,6 +6,11 @@ import Link from "next/link";
 import { FaCheck, FaCopy, FaWallet } from "react-icons/fa6";
 import { useWallet } from "@/app/providers/WalletProvider";
 import InstructionRow from "@/components/InstructionRow";
+import {
+  ProofPollingError,
+  ProofRefreshButton,
+  ProofSelectorRegion,
+} from "@/components/ProofSelectors";
 import RecentOrdersPanel from "@/components/RecentOrdersPanel";
 import StatusTimeline, { StatusPill } from "@/components/StatusTimeline";
 import WalletButton from "@/components/WalletButton";
@@ -548,19 +553,19 @@ export default function RentPage() {
               />
 
               {createdOrder && (
-                <div
+                <ProofSelectorRegion
                   className="mt-6 border-t border-[#30363d] pt-5"
-                  data-testid={FRONTEND_TEST_IDS.rentPaymentInstructions}
+                  testId={FRONTEND_TEST_IDS.rentPaymentInstructions}
                 >
                   <div className="mb-3 flex items-center justify-between gap-4">
                     <h4 className="font-bold">付款指引</h4>
                     {orderStatusMeta && (
-                      <div data-testid={FRONTEND_TEST_IDS.rentOrderStatus}>
+                      <ProofSelectorRegion testId={FRONTEND_TEST_IDS.rentOrderStatus}>
                         <StatusPill
                           label={orderStatusMeta.label}
                           tone={orderStatusMeta.tone}
                         />
-                      </div>
+                      </ProofSelectorRegion>
                     )}
                   </div>
                   {orderStatusMeta && (
@@ -571,27 +576,24 @@ export default function RentPage() {
                       <StatusTimeline steps={orderTimeline} />
                     </div>
                   )}
-                  <button
-                    type="button"
+                  <ProofRefreshButton
                     onClick={handleRefreshOrderStatus}
-                    disabled={isRefreshingOrder}
-                    data-testid={FRONTEND_TEST_IDS.rentRefreshStatus}
+                    isRefreshing={isRefreshingOrder}
+                    testId={FRONTEND_TEST_IDS.rentRefreshStatus}
                     className={`mb-4 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
                       isRefreshingOrder
                         ? "bg-gray-600 cursor-not-allowed"
                         : "bg-[#2d3748] hover:bg-[#4a5568]"
                     }`}
-                  >
-                    {isRefreshingOrder ? "刷新中..." : "刷新状态"}
-                  </button>
-                  <div data-testid={FRONTEND_TEST_IDS.rentOrderId}>
+                  />
+                  <ProofSelectorRegion testId={FRONTEND_TEST_IDS.rentOrderId}>
                     <InstructionRow
                       label="订单号"
                       value={createdOrder.id}
                       copied={copiedField === "order"}
                       onCopy={() => copyText("order", createdOrder.id)}
                     />
-                  </div>
+                  </ProofSelectorRegion>
                   <InstructionRow
                     label="金额"
                     value={createdOrder.paymentInstructions.amountDisplay}
@@ -690,15 +692,12 @@ export default function RentPage() {
                       )}
                     </div>
                   )}
-                  {pollingError && (
-                    <p
-                      className="mt-3 text-xs text-orange-200"
-                      data-testid={FRONTEND_TEST_IDS.rentPollingError}
-                    >
-                      状态刷新失败：{pollingError}
-                    </p>
-                  )}
-                </div>
+                  <ProofPollingError
+                    className="mt-3 text-xs text-orange-200"
+                    message={pollingError}
+                    testId={FRONTEND_TEST_IDS.rentPollingError}
+                  />
+                </ProofSelectorRegion>
               )}
             </aside>
           </div>

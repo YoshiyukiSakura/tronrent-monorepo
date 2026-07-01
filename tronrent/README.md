@@ -68,6 +68,11 @@ Run the frontend regression checks with:
 npm test
 ```
 
+These tests include a React server-render smoke for the selector-bearing proof
+components and source checks that the pages wire those components to the stable
+selectors. They are a prerequisite for browser E2E, not a replacement for a
+full Playwright flow.
+
 ## Roadmap
 
 - [x] Initial landing page
