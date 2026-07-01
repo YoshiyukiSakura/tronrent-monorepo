@@ -58,6 +58,7 @@ ENABLE_ORDER_EXPIRY_CRON=false
 ENABLE_EXCHANGE_EXPIRY_CRON=false
 ENABLE_DEPOSIT_SCAN_ENDPOINT=false
 ENABLE_READINESS_ENDPOINT=false
+ENABLE_AUTOMATION_BACKLOG_ENDPOINT=false
 ENABLE_PROVIDER_JOB_ENDPOINT=false
 ENABLE_EXCHANGE_PAYOUT_ENDPOINT=false
 EXCHANGE_PAYOUT_LIVE=false
@@ -66,6 +67,7 @@ EXCHANGE_PAYOUT_FROM_ADDRESS=
 EXCHANGE_PAYOUT_TRX_RESERVE_SUN=50000000
 EXCHANGE_PAYOUT_FEE_LIMIT_SUN=100000000
 DEPOSIT_WATCHER_ADMIN_TOKEN=
+AUTOMATION_BACKLOG_STALE_MINUTES=10
 MAX_PAYMENT_OFFSET_SUN=9999
 ORDER_CREATE_MAX_ATTEMPTS=8
 EXCHANGE_MAX_PAYMENT_OFFSET_BASE_UNITS=9999
@@ -98,6 +100,31 @@ curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
 The response reports only booleans, enums, counts, and warnings. It does not
 return treasury addresses, API keys, private keys, or TRC20 contract addresses,
 and it does not call APITRX, TronGrid, or any hot-wallet signer.
+
+## Automation Backlog Snapshot
+
+`GET /api/admin/automation/backlog` is a read-only operator endpoint for seeing
+whether the automatic provider and exchange payout queues have drainable or
+manual-review backlog. It is disabled by default and uses the same admin token
+gate:
+
+```bash
+ENABLE_AUTOMATION_BACKLOG_ENDPOINT=true
+DEPOSIT_WATCHER_ADMIN_TOKEN=replace-with-a-private-token
+AUTOMATION_BACKLOG_STALE_MINUTES=10
+```
+
+```bash
+curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
+  "http://localhost:4000/api/admin/automation/backlog?staleMinutes=10"
+```
+
+The response contains grouped status counts for energy orders/provider jobs and
+exchange orders/payout jobs, plus summary counts for `paid` energy orders,
+`funds_received` exchange orders, indeterminate items, and processing items
+older than the stale threshold. It never returns customer addresses, treasury
+addresses, API keys, private keys, or transaction payloads, and it never retries
+or mutates an order.
 
 ## Deposit Scan Pagination
 
