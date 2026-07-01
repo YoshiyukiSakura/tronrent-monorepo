@@ -12,6 +12,7 @@ const {
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINALS = {
+  consoleError: console.error,
   orderFindAll: db.Order.findAll,
   orderFindByPk: db.Order.findByPk,
   providerJobCreate: db.ProviderJob.create,
@@ -22,6 +23,7 @@ const ORIGINALS = {
 
 function restoreState() {
   process.env = { ...ORIGINAL_ENV };
+  console.error = ORIGINALS.consoleError;
   providerClient.resetFetchForTesting();
   db.Order.findAll = ORIGINALS.orderFindAll;
   db.Order.findByPk = ORIGINALS.orderFindByPk;
@@ -549,6 +551,171 @@ test("provider manual resolution rejects missing success evidence and wrong stat
       }),
     /Latest provider job is not indeterminate/
   );
+});
+
+test("pending paid provider batch clamps limit and continues after provider failures", async () => {
+  const rawApiKey = "provider-pending-batch-secret";
+  const failedOrder = buildMutableOrder({
+    id: "order-provider-fails",
+    energyAmount: 65000,
+  });
+  const successfulOrder = buildMutableOrder({
+    id: "order-provider-success",
+    energyAmount: 131000,
+  });
+  const failedJob = buildMutableProviderJob({ id: "provider-job-failed" });
+  const successfulJob = buildMutableProviderJob({
+    id: "provider-job-success",
+  });
+  const fetchCalls = [];
+  const loggedErrors = [];
+  let findAllOptions;
+
+  process.env.PROVIDER_LIVE = "true";
+  process.env.ENERGY_PROVIDER = "apitrx";
+  process.env.APITRX_API_KEY = rawApiKey;
+
+  console.error = (...args) => {
+    loggedErrors.push(args);
+  };
+  db.Order.findAll = async (options) => {
+    findAllOptions = options;
+    return [
+      { id: failedOrder.id },
+      { id: "order-provider-missing" },
+      { id: successfulOrder.id },
+    ];
+  };
+  db.sequelize.transaction = async (callback) => callback({ testTransaction: true });
+  db.Order.findByPk = async (id) => {
+    if (id === failedOrder.id) {
+      return failedOrder;
+    }
+    if (id === successfulOrder.id) {
+      return successfulOrder;
+    }
+    return null;
+  };
+  db.ProviderJob.create = async (payload) => {
+    const job =
+      payload.orderId === failedOrder.id ? failedJob : successfulJob;
+    Object.assign(job, payload);
+    return job;
+  };
+  db.ProviderJob.findByPk = async (id) => {
+    if (id === failedJob.id) {
+      return failedJob;
+    }
+    if (id === successfulJob.id) {
+      return successfulJob;
+    }
+    return null;
+  };
+  providerClient.setFetchForTesting(async (url) => {
+    const requestedUrl = new URL(String(url));
+    fetchCalls.push({
+      endpoint: requestedUrl.pathname,
+      value: requestedUrl.searchParams.get("value"),
+    });
+
+    if (
+      requestedUrl.pathname === "/price" &&
+      requestedUrl.searchParams.get("value") === String(failedOrder.energyAmount)
+    ) {
+      return {
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: 501,
+            message: "provider rejected this energy amount",
+          }),
+      };
+    }
+
+    if (requestedUrl.pathname === "/price") {
+      return {
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: 200,
+            data: { "1": 2.34 },
+            message: "SUCCESS",
+          }),
+      };
+    }
+
+    if (requestedUrl.pathname === "/balance") {
+      return {
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: 200,
+            data: { balance: 10 },
+            message: "SUCCESS",
+          }),
+      };
+    }
+
+    return {
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          code: 200,
+          data: { orderId: "upstream-order-success" },
+          message: "SUCCESS",
+        }),
+    };
+  });
+
+  const results = await providerJobService.processPendingPaidOrders({
+    limit: 999,
+  });
+
+  assert.deepEqual(findAllOptions.where, { status: ORDER_STATUSES.PAID });
+  assert.deepEqual(findAllOptions.order, [["paidAt", "ASC"]]);
+  assert.equal(findAllOptions.limit, 200);
+  assert.deepEqual(
+    results.map((result) => ({
+      orderId: result.orderId,
+      success: result.success,
+      skipped: Boolean(result.skipped),
+      indeterminate: Boolean(result.indeterminate),
+    })),
+    [
+      {
+        orderId: failedOrder.id,
+        success: false,
+        skipped: false,
+        indeterminate: false,
+      },
+      {
+        orderId: "order-provider-missing",
+        success: false,
+        skipped: true,
+        indeterminate: false,
+      },
+      {
+        orderId: successfulOrder.id,
+        success: true,
+        skipped: false,
+        indeterminate: false,
+      },
+    ]
+  );
+  assert.match(results[0].message, /APITRX price rejected/);
+  assert.equal(failedOrder.status, ORDER_STATUSES.FAILED);
+  assert.equal(failedJob.status, PROVIDER_JOB_STATUSES.FAILED);
+  assert.equal(successfulOrder.status, ORDER_STATUSES.FULFILLED);
+  assert.equal(successfulJob.status, PROVIDER_JOB_STATUSES.COMPLETED);
+  assert.equal(results[2].job.id, successfulJob.id);
+  assert.deepEqual(fetchCalls, [
+    { endpoint: "/price", value: "65000" },
+    { endpoint: "/price", value: "131000" },
+    { endpoint: "/balance", value: null },
+    { endpoint: "/getenergy", value: "131000" },
+  ]);
+  assert.equal(loggedErrors.length, 1);
+  assert.equal(JSON.stringify(results).includes(rawApiKey), false);
 });
 
 test("provider job stores redacted live provider failures and does not retry", async () => {

@@ -23,6 +23,14 @@ function getReviewLimit(rawLimit) {
   return Math.min(parsed, 200);
 }
 
+function getPendingPaidOrderLimit(rawLimit) {
+  const parsed = Number.parseInt(rawLimit || "10", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 10;
+  }
+  return Math.min(parsed, 200);
+}
+
 function getStaleProvisioningMinutes(rawMinutes) {
   const parsed = Number.parseInt(rawMinutes || "10", 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -488,19 +496,15 @@ async function processOrder(orderId) {
 }
 
 async function processPendingPaidOrders({ limit = 10 } = {}) {
+  const clampedLimit = getPendingPaidOrderLimit(limit);
   const orders = await Order.findAll({
     where: { status: ORDER_STATUSES.PAID },
     order: [["paidAt", "ASC"]],
-    limit,
+    limit: clampedLimit,
   });
 
-  const results = [];
-  for (const order of orders) {
-    const result = await processOrder(order.id);
-    results.push(result);
-  }
-
-  return results;
+  const orderIds = orders.map((order) => order.id).filter(Boolean);
+  return processOrders(orderIds);
 }
 
 async function processOrders(orderIds = []) {

@@ -165,6 +165,11 @@ This manual endpoint is privileged in every environment. Set
 `ENABLE_PROVIDER_JOB_ENDPOINT=true`, set `DEPOSIT_WATCHER_ADMIN_TOKEN`, and send
 the token as `x-admin-token`. The scheduled cron path is controlled separately by
 `ENABLE_ORDER_PROVIDER_CRON`.
+`POST /api/provider-jobs/process` keeps explicit-ID processing when `orderIds`
+is present. When no IDs are supplied, it drains pending paid energy orders by
+`limit` (default 10, max 200) and returns the same per-order structured result
+shape as explicit-ID processing, so one failed provider order does not abort the
+rest of the batch.
 
 The apitrx live adapter is present but fail-closed. It only calls the upstream
 provider when all of these are true:

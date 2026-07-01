@@ -37,9 +37,8 @@ router.post("/process", async (req, res) => {
       });
     }
 
-    const limit = Number.parseInt(req.body.limit || "10", 10);
     const jobs = await providerJobService.processPendingPaidOrders({
-      limit: Number.isFinite(limit) ? limit : 10,
+      limit: req.body.limit,
     });
 
     res.status(200).json({
