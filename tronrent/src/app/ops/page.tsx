@@ -58,6 +58,26 @@ function Metric({
   );
 }
 
+function LineModeCard({
+  label,
+  mode,
+  ready,
+}: {
+  label: string;
+  mode: string;
+  ready: boolean;
+}) {
+  return (
+    <div className={`rounded-md border px-4 py-3 ${toneForMode(mode)}`}>
+      <div className="text-xs opacity-80">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{mode}</div>
+      <div className="mt-1 text-xs opacity-80">
+        {ready ? "可 live" : "未就绪"}
+      </div>
+    </div>
+  );
+}
+
 function BooleanRow({ label, value }: { label: string; value: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-[#30363d] py-2 text-sm last:border-b-0">
@@ -80,6 +100,14 @@ function ReadinessPanel({ readiness }: { readiness: OpsReadinessReport | null })
   }
 
   const warnings = readiness.warnings || [];
+  const energyRentalMode =
+    readiness.summary.energyRentalMode || readiness.summary.mode;
+  const energyRentalReady =
+    readiness.summary.energyRentalReady ??
+    readiness.summary.readyForLiveOperations;
+  const exchangeMode = readiness.summary.exchangeMode || readiness.summary.mode;
+  const exchangeReady =
+    readiness.summary.exchangeReady ?? readiness.summary.readyForLiveOperations;
 
   return (
     <section className="rounded-md border border-[#30363d] bg-[#161b22] p-5">
@@ -99,6 +127,19 @@ function ReadinessPanel({ readiness }: { readiness: OpsReadinessReport | null })
         <Metric label="可 live 运行" value={readiness.summary.readyForLiveOperations} />
         <Metric label="告警数量" value={readiness.summary.warningCount} />
         <Metric label="生成时间" value={new Date(readiness.generatedAt).toLocaleString("zh-CN")} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <LineModeCard
+          label="租能链路"
+          mode={energyRentalMode}
+          ready={energyRentalReady}
+        />
+        <LineModeCard
+          label="换汇链路"
+          mode={exchangeMode}
+          ready={exchangeReady}
+        />
       </div>
 
       <div

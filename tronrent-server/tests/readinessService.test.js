@@ -109,6 +109,10 @@ test("readiness report marks fully automated live configuration without leaking 
 
   assert.equal(report.summary.mode, "live");
   assert.equal(report.summary.readyForLiveOperations, true);
+  assert.equal(report.summary.energyRentalMode, "live");
+  assert.equal(report.summary.energyRentalReady, true);
+  assert.equal(report.summary.exchangeMode, "live");
+  assert.equal(report.summary.exchangeReady, true);
   assert.equal(report.warnings.length, 0);
   assert.equal(report.provider.apitrxApiKeyConfigured, true);
   assert.equal(report.exchangePayout.privateKeyConfigured, true);
@@ -128,6 +132,10 @@ test("readiness report flags provider live mode without APITRX key", () => {
 
   assert.equal(report.summary.mode, "partial-live");
   assert.equal(report.summary.readyForLiveOperations, false);
+  assert.equal(report.summary.energyRentalMode, "partial-live");
+  assert.equal(report.summary.energyRentalReady, false);
+  assert.equal(report.summary.exchangeMode, "live");
+  assert.equal(report.summary.exchangeReady, true);
   assert.equal(
     report.warnings.some(
       (warning) => warning.code === "PROVIDER_LIVE_MISSING_API_KEY"
@@ -147,6 +155,10 @@ test("readiness report flags exchange payout live mode without hot wallet and US
 
   assert.equal(report.summary.mode, "partial-live");
   assert.equal(report.summary.readyForLiveOperations, false);
+  assert.equal(report.summary.energyRentalMode, "live");
+  assert.equal(report.summary.energyRentalReady, true);
+  assert.equal(report.summary.exchangeMode, "partial-live");
+  assert.equal(report.summary.exchangeReady, false);
   assert.equal(
     report.warnings.some(
       (warning) => warning.code === "EXCHANGE_PAYOUT_LIVE_MISSING_PRIVATE_KEY"
@@ -168,10 +180,13 @@ test("readiness report flags exchange payout live mode without hot wallet and US
 });
 
 test("readiness report distinguishes dry-run from partial-live automation", () => {
-  assert.equal(
-    readinessService.buildReadinessReport({ env: {} }).summary.mode,
-    "dry-run"
-  );
+  const dryRun = readinessService.buildReadinessReport({ env: {} });
+
+  assert.equal(dryRun.summary.mode, "dry-run");
+  assert.equal(dryRun.summary.energyRentalMode, "dry-run");
+  assert.equal(dryRun.summary.energyRentalReady, false);
+  assert.equal(dryRun.summary.exchangeMode, "dry-run");
+  assert.equal(dryRun.summary.exchangeReady, false);
 
   const partial = readinessService.buildReadinessReport({
     env: {
@@ -180,6 +195,9 @@ test("readiness report distinguishes dry-run from partial-live automation", () =
   });
 
   assert.equal(partial.summary.mode, "partial-live");
+  assert.equal(partial.summary.energyRentalMode, "dry-run");
+  assert.equal(partial.summary.exchangeMode, "partial-live");
+  assert.equal(partial.summary.exchangeReady, false);
   assert.equal(
     partial.warnings.some(
       (warning) => warning.code === "EXCHANGE_PAYOUT_AUTOMATION_DRY_RUN"

@@ -310,6 +310,56 @@ function deriveMode(report, warnings) {
   return "partial-live";
 }
 
+function deriveLineMode(hasLiveGate, readyForLive) {
+  if (!hasLiveGate) {
+    return "dry-run";
+  }
+  return readyForLive ? "live" : "partial-live";
+}
+
+function deriveBusinessLineSummary(report) {
+  // Full live readiness follows the deposit-triggered path; standalone drains are fallback operators.
+  const energyRentalReady =
+    report.admin.adminTokenConfigured &&
+    report.depositScan.endpointEnabled &&
+    report.depositScan.cronEnabled &&
+    report.depositScan.processProviderJobs &&
+    report.provider.live &&
+    report.provider.readyForLive &&
+    report.provider.endpointEnabled &&
+    report.orderExpiry.cronEnabled;
+  const energyRentalMode = deriveLineMode(
+    report.provider.live ||
+      report.depositScan.processProviderJobs ||
+      report.provider.cronEnabled,
+    energyRentalReady
+  );
+
+  const exchangeReady =
+    report.admin.adminTokenConfigured &&
+    report.depositScan.endpointEnabled &&
+    report.depositScan.cronEnabled &&
+    report.depositScan.processExchangePayouts &&
+    report.exchangePayout.live &&
+    report.exchangePayout.readyForLive &&
+    report.exchangePayout.endpointEnabled &&
+    report.exchangePayout.cronEnabled &&
+    report.exchangeExpiry.cronEnabled;
+  const exchangeMode = deriveLineMode(
+    report.exchangePayout.live ||
+      report.depositScan.processExchangePayouts ||
+      report.exchangePayout.cronEnabled,
+    exchangeReady
+  );
+
+  return {
+    energyRentalMode,
+    energyRentalReady,
+    exchangeMode,
+    exchangeReady,
+  };
+}
+
 function buildReadinessReport({ env = process.env, now = new Date() } = {}) {
   const trc20Contracts = parseTrc20Allowlist(env);
   const trc20Symbols = Array.from(
@@ -388,11 +438,13 @@ function buildReadinessReport({ env = process.env, now = new Date() } = {}) {
 
   const warnings = buildWarnings(report);
   const mode = deriveMode(report, warnings);
+  const businessLineSummary = deriveBusinessLineSummary(report);
   return {
     ...report,
     summary: {
       mode,
       readyForLiveOperations: mode === "live",
+      ...businessLineSummary,
       warningCount: warnings.length,
     },
     warnings,

@@ -81,6 +81,10 @@ function makeReadiness() {
     summary: {
       mode: "partial-live",
       readyForLiveOperations: false,
+      energyRentalMode: "partial-live",
+      energyRentalReady: false,
+      exchangeMode: "dry-run",
+      exchangeReady: false,
       warningCount: 1,
     },
     warnings: [
@@ -285,6 +289,10 @@ test("ops console loads readiness and backlog with admin token", async ({ page }
   await expect(page.getByTestId(FRONTEND_TEST_IDS.opsReadyForLive)).toContainText(
     "APITRX key"
   );
+  await expect(page.getByText("租能链路")).toBeVisible();
+  await expect(page.getByText("换汇链路")).toBeVisible();
+  await expect(page.getByText("dry-run", { exact: true })).toBeVisible();
+  await expect(page.getByText("未就绪")).toHaveCount(2);
   await expect(page.getByTestId(FRONTEND_TEST_IDS.opsWarnings)).toContainText(
     "EXCHANGE_PAYOUT_AUTOMATION_DRY_RUN"
   );

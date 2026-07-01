@@ -9,6 +9,10 @@ export type OpsReadinessReport = {
   summary: {
     mode: "dry-run" | "partial-live" | "live" | string;
     readyForLiveOperations: boolean;
+    energyRentalMode?: "dry-run" | "partial-live" | "live" | string;
+    energyRentalReady?: boolean;
+    exchangeMode?: "dry-run" | "partial-live" | "live" | string;
+    exchangeReady?: boolean;
     warningCount: number;
   };
   warnings: OpsWarning[];

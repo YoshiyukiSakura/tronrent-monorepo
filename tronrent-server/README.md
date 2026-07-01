@@ -99,7 +99,10 @@ curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
 
 The response reports only booleans, enums, counts, and warnings. It does not
 return treasury addresses, API keys, private keys, or TRC20 contract addresses,
-and it does not call APITRX, TronGrid, or any hot-wallet signer.
+and it does not call APITRX, TronGrid, or any hot-wallet signer. The summary
+keeps the overall deployment mode and also reports separate energy-rental and
+exchange-payout modes so one business line can be live-ready while the other
+still needs configuration.
 
 ## Automation Backlog Snapshot
 
