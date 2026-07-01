@@ -41,6 +41,13 @@ function formatBoolean(value: boolean | undefined) {
   return value ? "已启用" : "未启用";
 }
 
+function sumRecordValues(record: Record<string, number> | undefined) {
+  return Object.values(record || {}).reduce(
+    (sum, value) => sum + Number(value || 0),
+    0
+  );
+}
+
 function Metric({
   label,
   value,
@@ -220,6 +227,11 @@ function BacklogPanel({ backlog }: { backlog: OpsBacklogSnapshot | null }) {
   }
 
   const summary = backlog.summary;
+  const depositReview = backlog.depositReview;
+  const depositReviewCount =
+    summary.depositReviewCount ?? sumRecordValues(depositReview?.statuses);
+  const depositManualReview = depositReview?.manualReview;
+  const directEnergyReview = depositReview?.directEnergy;
 
   return (
     <section className="rounded-md border border-[#30363d] bg-[#161b22] p-5">
@@ -239,8 +251,9 @@ function BacklogPanel({ backlog }: { backlog: OpsBacklogSnapshot | null }) {
         <Metric label="不确定订单" value={summary.indeterminateOrderCount} />
         <Metric label="活跃 job" value={summary.activeJobCount} />
         <Metric label="失败/不确定 job" value={summary.failedOrIndeterminateJobCount} />
+        <Metric label="入金异常" value={depositReviewCount} />
       </div>
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <div>
           <h3 className="mb-2 text-sm font-semibold text-gray-200">能量进货</h3>
           <Metric label="paid 待进货" value={backlog.provider.orders.drainable.paid} />
@@ -251,6 +264,30 @@ function BacklogPanel({ backlog }: { backlog: OpsBacklogSnapshot | null }) {
             label="funds_received 待出款"
             value={backlog.exchangePayout.orders.drainable.fundsReceived}
           />
+        </div>
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-gray-200">入金异常</h3>
+          <Metric
+            label="直付租能待核查"
+            value={directEnergyReview?.manualReviewCount ?? 0}
+          />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Metric label="未匹配" value={depositManualReview?.unmatched ?? 0} />
+            <Metric label="同价/多候选" value={depositManualReview?.ambiguous ?? 0} />
+            <Metric
+              label="过期匹配"
+              value={depositManualReview?.matchedButExpired ?? 0}
+            />
+            <Metric
+              label="拒绝 token"
+              value={depositManualReview?.rejectedToken ?? 0}
+            />
+          </div>
+          {directEnergyReview?.sharedTreasuryWithExchange && (
+            <p className="mt-3 text-xs text-orange-200">
+              能量和兑换共用 treasury，直付租能子计数已关闭。
+            </p>
+          )}
         </div>
       </div>
     </section>

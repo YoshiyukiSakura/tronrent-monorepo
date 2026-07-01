@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  ChainDeposit,
   ExchangeOrder,
   ExchangePayoutJob,
   Order,
@@ -13,6 +14,10 @@ const {
   EXCHANGE_ORDER_STATUSES,
   EXCHANGE_PAYOUT_STATUSES,
 } = require("./exchangeOrderService");
+const {
+  DEPOSIT_STATUSES,
+  normalizeAddress,
+} = require("./depositMatcher");
 const {
   ORDER_STATUSES,
   PROVIDER_JOB_STATUSES,
@@ -43,6 +48,16 @@ const EXCHANGE_PAYOUT_JOB_BACKLOG_STATUSES = Object.freeze([
   EXCHANGE_PAYOUT_STATUSES.PROCESSING,
   EXCHANGE_PAYOUT_STATUSES.FAILED,
   EXCHANGE_PAYOUT_STATUSES.INDETERMINATE,
+]);
+const DEPOSIT_REVIEW_STATUSES = Object.freeze([
+  DEPOSIT_STATUSES.UNMATCHED,
+  DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS,
+  DEPOSIT_STATUSES.MATCHED_BUT_EXPIRED,
+  DEPOSIT_STATUSES.REJECTED_TOKEN,
+]);
+const DIRECT_ENERGY_DEPOSIT_REVIEW_STATUSES = Object.freeze([
+  DEPOSIT_STATUSES.UNMATCHED,
+  DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS,
 ]);
 
 function getStaleMinutes(rawMinutes, env = process.env) {
@@ -121,6 +136,51 @@ async function countStaleStatus(model, status, staleCutoff, sequelizeLib) {
   return parseCount(count);
 }
 
+async function countDirectEnergyReviewDeposits({
+  env,
+  model,
+  sequelizeLib,
+  statuses,
+}) {
+  const energyTreasury = normalizeAddress(env.TREASURY_TRON_ADDRESS);
+  const exchangeTreasury = normalizeAddress(env.EXCHANGE_TREASURY_TRON_ADDRESS);
+  const sharedTreasuryWithExchange = Boolean(
+    energyTreasury &&
+      exchangeTreasury &&
+      energyTreasury === exchangeTreasury
+  );
+
+  if (!energyTreasury || sharedTreasuryWithExchange) {
+    return {
+      manualReviewCount: 0,
+      sharedTreasuryWithExchange,
+    };
+  }
+
+  const Op = sequelizeLib.Op;
+  const rows = await model.findAll({
+    attributes: ["status", "asset", "toAddress"],
+    where: {
+      asset: "TRX",
+      status: { [Op.in]: statuses },
+    },
+    raw: true,
+  });
+  const allowedStatuses = new Set(statuses);
+  const manualReviewCount = rows.filter((row) => {
+    return (
+      allowedStatuses.has(getRowValue(row, "status")) &&
+      getRowValue(row, "asset") === "TRX" &&
+      normalizeAddress(getRowValue(row, "toAddress")) === energyTreasury
+    );
+  }).length;
+
+  return {
+    manualReviewCount,
+    sharedTreasuryWithExchange,
+  };
+}
+
 function sumValues(object) {
   return Object.values(object).reduce((sum, value) => sum + Number(value || 0), 0);
 }
@@ -130,6 +190,7 @@ async function buildAutomationBacklogSnapshot({
   now = new Date(),
   env = process.env,
   models = {
+    ChainDeposit,
     ExchangeOrder,
     ExchangePayoutJob,
     Order,
@@ -147,6 +208,8 @@ async function buildAutomationBacklogSnapshot({
       providerJobStatuses,
       exchangeOrderStatuses,
       exchangePayoutJobStatuses,
+      depositStatuses,
+      directEnergyDepositReview,
       staleProviderProvisioning,
       staleExchangePayoutProcessing,
     ] = await Promise.all([
@@ -166,6 +229,13 @@ async function buildAutomationBacklogSnapshot({
         EXCHANGE_PAYOUT_JOB_BACKLOG_STATUSES,
         sequelizeLib
       ),
+      countByStatus(models.ChainDeposit, DEPOSIT_REVIEW_STATUSES, sequelizeLib),
+      countDirectEnergyReviewDeposits({
+        env,
+        model: models.ChainDeposit,
+        sequelizeLib,
+        statuses: DIRECT_ENERGY_DEPOSIT_REVIEW_STATUSES,
+      }),
       countStaleStatus(
         models.Order,
         ORDER_STATUSES.PROVISIONING,
@@ -186,6 +256,7 @@ async function buildAutomationBacklogSnapshot({
     const exchangeManualReviewCount =
       exchangeOrderStatuses[EXCHANGE_ORDER_STATUSES.PAYOUT_INDETERMINATE] +
       staleExchangePayoutProcessing;
+    const depositReviewCount = sumValues(depositStatuses);
     const drainableProviderCount = orderStatuses[ORDER_STATUSES.PAID];
     const drainableExchangeCount =
       exchangeOrderStatuses[EXCHANGE_ORDER_STATUSES.FUNDS_RECEIVED];
@@ -211,7 +282,10 @@ async function buildAutomationBacklogSnapshot({
       summary: {
         drainableCount: drainableProviderCount + drainableExchangeCount,
         manualReviewCount:
-          providerManualReviewCount + exchangeManualReviewCount,
+          providerManualReviewCount +
+          exchangeManualReviewCount +
+          depositReviewCount,
+        depositReviewCount,
         staleProcessingCount,
         indeterminateOrderCount,
         activeJobCount,
@@ -220,7 +294,8 @@ async function buildAutomationBacklogSnapshot({
           sumValues(orderStatuses) +
           sumValues(providerJobStatuses) +
           sumValues(exchangeOrderStatuses) +
-          sumValues(exchangePayoutJobStatuses),
+          sumValues(exchangePayoutJobStatuses) +
+          depositReviewCount,
       },
       provider: {
         orders: {
@@ -255,6 +330,17 @@ async function buildAutomationBacklogSnapshot({
         jobs: {
           statuses: exchangePayoutJobStatuses,
         },
+      },
+      depositReview: {
+        statuses: depositStatuses,
+        manualReview: {
+          unmatched: depositStatuses[DEPOSIT_STATUSES.UNMATCHED],
+          ambiguous: depositStatuses[DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS],
+          matchedButExpired:
+            depositStatuses[DEPOSIT_STATUSES.MATCHED_BUT_EXPIRED],
+          rejectedToken: depositStatuses[DEPOSIT_STATUSES.REJECTED_TOKEN],
+        },
+        directEnergy: directEnergyDepositReview,
       },
     };
   } catch (error) {

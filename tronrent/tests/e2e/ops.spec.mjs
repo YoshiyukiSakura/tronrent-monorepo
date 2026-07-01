@@ -104,12 +104,13 @@ function makeBacklog() {
     staleCutoff: "2026-07-01T00:51:00.000Z",
     summary: {
       drainableCount: 5,
-      manualReviewCount: 2,
+      manualReviewCount: 6,
+      depositReviewCount: 4,
       staleProcessingCount: 1,
       indeterminateOrderCount: 1,
       activeJobCount: 3,
       failedOrIndeterminateJobCount: 4,
-      trackedStatusCount: 15,
+      trackedStatusCount: 19,
     },
     provider: {
       orders: {
@@ -157,6 +158,24 @@ function makeBacklog() {
           failed: 1,
           indeterminate: 1,
         },
+      },
+    },
+    depositReview: {
+      statuses: {
+        unmatched: 2,
+        unmatched_ambiguous: 1,
+        matched_but_expired: 1,
+        rejected_token: 0,
+      },
+      manualReview: {
+        unmatched: 2,
+        ambiguous: 1,
+        matchedButExpired: 1,
+        rejectedToken: 0,
+      },
+      directEnergy: {
+        manualReviewCount: 2,
+        sharedTreasuryWithExchange: false,
       },
     },
   };
@@ -299,6 +318,10 @@ test("ops console loads readiness and backlog with admin token", async ({ page }
   await expect(
     page.getByTestId(FRONTEND_TEST_IDS.opsBacklogSummary)
   ).toContainText("可处理队列");
+  await expect(
+    page.getByTestId(FRONTEND_TEST_IDS.opsBacklogSummary)
+  ).toContainText("入金异常");
+  await expect(page.getByText("直付租能待核查")).toBeVisible();
   await expect(
     page.getByTestId(FRONTEND_TEST_IDS.opsBacklogSummary)
   ).toContainText("5");

@@ -127,9 +127,15 @@ curl -H "x-admin-token: $DEPOSIT_WATCHER_ADMIN_TOKEN" \
 The response contains grouped status counts for energy orders/provider jobs and
 exchange orders/payout jobs, plus summary counts for `paid` energy orders,
 `funds_received` exchange orders, indeterminate items, and processing items
-older than the stale threshold. It never returns customer addresses, treasury
-addresses, API keys, private keys, or transaction payloads, and it never retries
-or mutates an order.
+older than the stale threshold. It also reports aggregate `chain_deposits`
+review counts for unmatched, ambiguous, expired-match, and rejected-token
+deposits. When `TREASURY_TRON_ADDRESS` is configured and does not equal
+`EXCHANGE_TREASURY_TRON_ADDRESS`, the snapshot includes a direct-pay energy
+subcount for unmatched or ambiguous TRX deposits to that treasury.
+
+The endpoint never returns customer addresses, treasury addresses, API keys,
+private keys, or transaction payloads, and it never retries or mutates an order
+or deposit.
 
 ## Deposit Scan Pagination
 

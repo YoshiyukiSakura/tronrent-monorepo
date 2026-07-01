@@ -56,6 +56,7 @@ export type OpsBacklogSnapshot = {
     indeterminateOrderCount: number;
     activeJobCount: number;
     failedOrIndeterminateJobCount: number;
+    depositReviewCount?: number;
     trackedStatusCount: number;
   };
   provider: {
@@ -80,6 +81,19 @@ export type OpsBacklogSnapshot = {
     };
     jobs: {
       statuses: Record<string, number>;
+    };
+  };
+  depositReview?: {
+    statuses: Record<string, number>;
+    manualReview: {
+      unmatched: number;
+      ambiguous: number;
+      matchedButExpired: number;
+      rejectedToken: number;
+    };
+    directEnergy: {
+      manualReviewCount: number;
+      sharedTreasuryWithExchange: boolean;
     };
   };
 };

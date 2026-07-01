@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const express = require("express");
 const adminRoutes = require("../routes/adminRoutes");
 const automationBacklogService = require("../services/automationBacklogService");
+const { DEPOSIT_STATUSES } = require("../services/depositMatcher");
 const {
   EXCHANGE_ORDER_STATUSES,
   EXCHANGE_PAYOUT_STATUSES,
@@ -18,6 +19,8 @@ const {
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_BUILD_SNAPSHOT =
   automationBacklogService.buildAutomationBacklogSnapshot;
+const ENERGY_TREASURY = "TEnergyTreasury111111111111111111111111";
+const EXCHANGE_TREASURY = "TExchangeTreasury1111111111111111111111";
 
 test.afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
@@ -97,6 +100,45 @@ function makeFakeModels({ Sequelize, calls }) {
 
   return {
     Sequelize,
+    ChainDeposit: {
+      async findAll(options) {
+        calls.push({ model: "ChainDeposit", method: "findAll", options });
+        if (options.attributes.includes("toAddress")) {
+          return [
+            {
+              status: DEPOSIT_STATUSES.UNMATCHED,
+              asset: "TRX",
+              toAddress: ` ${ENERGY_TREASURY} `,
+            },
+            {
+              status: DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS,
+              asset: "TRX",
+              toAddress: ENERGY_TREASURY,
+            },
+            {
+              status: DEPOSIT_STATUSES.UNMATCHED,
+              asset: "TRX",
+              toAddress: EXCHANGE_TREASURY,
+            },
+            {
+              status: DEPOSIT_STATUSES.REJECTED_TOKEN,
+              asset: "TRC20",
+              toAddress: ENERGY_TREASURY,
+            },
+          ];
+        }
+        return [
+          { status: DEPOSIT_STATUSES.UNMATCHED, count: "4" },
+          { status: DEPOSIT_STATUSES.UNMATCHED_AMBIGUOUS, count: "1" },
+          { status: DEPOSIT_STATUSES.MATCHED_BUT_EXPIRED, count: "2" },
+          { status: DEPOSIT_STATUSES.REJECTED_TOKEN, count: "3" },
+        ];
+      },
+      async count(options) {
+        calls.push({ model: "ChainDeposit", method: "count", options });
+        return 0;
+      },
+    },
     Order: makeModel(
       "Order",
       [
@@ -138,6 +180,10 @@ test("automation backlog snapshot aggregates drainable and review queues without
     {
       staleMinutes: "20",
       now,
+      env: {
+        TREASURY_TRON_ADDRESS: ENERGY_TREASURY,
+        EXCHANGE_TREASURY_TRON_ADDRESS: EXCHANGE_TREASURY,
+      },
       models,
     }
   );
@@ -147,12 +193,13 @@ test("automation backlog snapshot aggregates drainable and review queues without
   assert.equal(snapshot.staleCutoff, "2026-06-30T23:40:00.000Z");
   assert.deepEqual(snapshot.summary, {
     drainableCount: 7,
-    manualReviewCount: 8,
+    manualReviewCount: 18,
+    depositReviewCount: 10,
     staleProcessingCount: 5,
     indeterminateOrderCount: 3,
     activeJobCount: 10,
     failedOrIndeterminateJobCount: 8,
-    trackedStatusCount: 38,
+    trackedStatusCount: 48,
   });
   assert.equal(snapshot.provider.orders.drainable.paid, 2);
   assert.equal(
@@ -169,10 +216,21 @@ test("automation backlog snapshot aggregates drainable and review queues without
     snapshot.exchangePayout.orders.manualReview.stalePayoutProcessing,
     2
   );
+  assert.deepEqual(snapshot.depositReview.manualReview, {
+    unmatched: 4,
+    ambiguous: 1,
+    matchedButExpired: 2,
+    rejectedToken: 3,
+  });
+  assert.equal(snapshot.depositReview.directEnergy.manualReviewCount, 2);
+  assert.equal(
+    snapshot.depositReview.directEnergy.sharedTreasuryWithExchange,
+    false
+  );
 
   assert.equal(
     calls.filter((call) => call.method === "findAll").length,
-    4
+    6
   );
   assert.equal(calls.filter((call) => call.method === "count").length, 2);
 
@@ -183,6 +241,40 @@ test("automation backlog snapshot aggregates drainable and review queues without
   assert.equal(
     orderStaleCall.options.where.updatedAt[Sequelize.Op.lte].toISOString(),
     "2026-06-30T23:40:00.000Z"
+  );
+});
+
+test("automation backlog skips direct-energy review count for shared treasuries", async () => {
+  const calls = [];
+  const Sequelize = makeFakeSequelize();
+  const models = makeFakeModels({ Sequelize, calls });
+  const now = new Date("2026-07-01T00:00:00.000Z");
+
+  const snapshot = await automationBacklogService.buildAutomationBacklogSnapshot(
+    {
+      staleMinutes: "20",
+      now,
+      env: {
+        TREASURY_TRON_ADDRESS: ENERGY_TREASURY,
+        EXCHANGE_TREASURY_TRON_ADDRESS: ENERGY_TREASURY,
+      },
+      models,
+    }
+  );
+
+  assert.equal(snapshot.depositReview.directEnergy.manualReviewCount, 0);
+  assert.equal(
+    snapshot.depositReview.directEnergy.sharedTreasuryWithExchange,
+    true
+  );
+  assert.equal(
+    calls.filter(
+      (call) =>
+        call.model === "ChainDeposit" &&
+        call.method === "findAll" &&
+        call.options.attributes.includes("toAddress")
+    ).length,
+    0
   );
 });
 
@@ -213,6 +305,7 @@ test("automation backlog snapshot sanitizes database query failures", async () =
       automationBacklogService.buildAutomationBacklogSnapshot({
         models: {
           Sequelize,
+          ChainDeposit: failingModel,
           Order: failingModel,
           ProviderJob: failingModel,
           ExchangeOrder: failingModel,

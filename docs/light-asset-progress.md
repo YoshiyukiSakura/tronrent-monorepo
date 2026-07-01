@@ -27,6 +27,9 @@ wallet automation.
   exchange-payout modes.
 - Ops console can load readiness/backlog and manually trigger scan or queue
   drains without rendering raw addresses, txids, or upstream payloads.
+- Ops backlog also surfaces aggregate chain-deposit review counts, including a
+  direct-pay energy subcount when the energy treasury is distinct from the
+  exchange treasury.
 
 ## Direct-Pay Rental Slice
 
@@ -52,6 +55,9 @@ The first backend slice is implemented with these boundaries:
   post-match provider path to fulfill it.
 - Do not infer energy targets for TRC20 transfers, exchange deposits, memo-less
   third-party senders, or custodial exchange withdrawals.
+- Unmatched, ambiguous, expired-match, and rejected-token deposits are visible
+  in the operator backlog as aggregate counts only; row-level review and refund
+  actions are still intentionally absent.
 
 The rent page now advertises the direct-pay amounts and explains the
 sender-address caveat. It still does not create an order upfront for this path.
@@ -94,7 +100,7 @@ order fields, write `matchedOrderId`, reject ambiguous plan prices, and validate
 
 ## Remaining Gaps
 
-- Add operator/refund handling for unmatched direct deposits and custodial
-  exchange withdrawals.
+- Add row-level operator/refund handling for unmatched direct deposits and
+  custodial exchange withdrawals.
 - Run DB-backed E2E with `TEST_DATABASE_URL` before treating the direct-pay path
   as production-ready.

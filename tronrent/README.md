@@ -130,7 +130,9 @@ does not persist it to storage, cookies, or the URL.
 The page reads:
 
 - `GET /api/admin/readiness`
-- `GET /api/admin/automation/backlog`
+- `GET /api/admin/automation/backlog`, including aggregate chain-deposit
+  review counts and the direct-pay energy review subcount when treasury
+  addresses are distinct.
 
 It can trigger:
 
@@ -141,8 +143,9 @@ It can trigger:
 - `POST /api/exchange/payout-jobs/process` with no `exchangeOrderIds`,
   draining pending exchange payouts through the backend gate.
 
-Action responses are reduced to counts and status fields; raw order rows,
-addresses, txids, upstream payloads, and secret-shaped fields are not rendered.
+Readiness, backlog, and action responses are reduced to counts and status
+fields; raw order rows, addresses, txids, upstream payloads, and secret-shaped
+fields are not rendered.
 
 ## Roadmap
 

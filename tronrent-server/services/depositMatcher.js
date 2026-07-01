@@ -140,4 +140,5 @@ module.exports = {
   classifyDepositMatch,
   getAllowedTrc20Contracts,
   isAllowedTrc20Deposit,
+  normalizeAddress,
 };
